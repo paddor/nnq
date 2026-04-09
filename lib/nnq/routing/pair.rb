@@ -67,6 +67,12 @@ module NNQ
         super
         @recv_queue.enqueue(nil) # wake any waiter
       end
+
+
+      # Wake recv side without tearing down the send pump.
+      def close_read
+        @recv_queue.enqueue(nil)
+      end
     end
   end
 end

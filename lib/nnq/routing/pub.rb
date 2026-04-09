@@ -77,6 +77,7 @@ module NNQ
           loop do
             body = queue.dequeue
             conn.send_message(body)
+            @engine.emit_verbose_monitor_event(:message_sent, body: body)
           rescue EOFError, IOError, Errno::EPIPE, Errno::ECONNRESET
             break
           end

@@ -33,6 +33,14 @@ module NNQ
       def close
         @queue.enqueue(nil)
       end
+
+
+      # Wakes any waiters with nil, leaving the send side untouched
+      # (PULL has no send side — close_read is identical to close here,
+      # but kept separate for the `Socket#close_read` contract).
+      def close_read
+        @queue.enqueue(nil)
+      end
     end
   end
 end

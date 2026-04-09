@@ -89,6 +89,11 @@ module NNQ
       end
 
 
+      def close_read
+        @recv_queue.enqueue(nil)
+      end
+
+
       private
 
       # Reads 4-byte BE words off the front of +body+, stopping at the

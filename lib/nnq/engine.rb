@@ -2,12 +2,15 @@
 
 require "async"
 require "async/clock"
+require "set"
 require "protocol/sp"
 require_relative "error"
 require_relative "connection"
+require_relative "monitor_event"
 require_relative "reactor"
 require_relative "engine/socket_lifecycle"
 require_relative "engine/connection_lifecycle"
+require_relative "engine/reconnect"
 require_relative "transport/tcp"
 require_relative "transport/ipc"
 require_relative "transport/inproc"
@@ -47,20 +50,54 @@ module NNQ
     # @return [Async::Condition] signaled when a new pipe is registered
     attr_reader :new_pipe
 
+    # @return [Set<String>] endpoints we have called #connect on; used
+    #   to decide whether to schedule a reconnect after a connection
+    #   is lost.
+    attr_reader :dialed
+
+    # @return [Array<Async::Task>] transient tasks owned by the engine
+    #   (currently just background reconnect loops). Stopped at #close.
+    attr_reader :tasks
+
+
+    # @return [Async::Queue, nil] monitor event queue (set by Socket#monitor)
+    attr_accessor :monitor_queue
+    attr_accessor :verbose_monitor
+
 
     # @param protocol [Integer] our SP protocol id (e.g. Protocols::PUSH_V0)
     # @param options [Options]
     # @yieldparam engine [Engine] used by the caller to build a routing
     #   strategy with access to the engine's connection map
     def initialize(protocol:, options:)
-      @protocol      = protocol
-      @options       = options
-      @connections   = {}
-      @listeners     = []
-      @lifecycle     = SocketLifecycle.new
-      @last_endpoint = nil
-      @new_pipe      = Async::Condition.new
-      @routing       = yield(self)
+      @protocol        = protocol
+      @options         = options
+      @connections     = {}
+      @listeners       = []
+      @lifecycle       = SocketLifecycle.new
+      @last_endpoint   = nil
+      @new_pipe        = Async::Condition.new
+      @monitor_queue   = nil
+      @verbose_monitor = false
+      @dialed          = Set.new
+      @tasks           = []
+      @routing         = yield(self)
+    end
+
+
+    # Emits a monitor event to the attached queue (if any).
+    def emit_monitor_event(type, endpoint: nil, detail: nil)
+      return unless @monitor_queue
+      @monitor_queue.enqueue(MonitorEvent.new(type: type, endpoint: endpoint, detail: detail))
+    rescue Async::Stop
+    end
+
+
+    # Emits a verbose-only monitor event. Only forwarded when
+    # {Socket#monitor} was called with +verbose: true+.
+    def emit_verbose_monitor_event(type, **detail)
+      return unless @verbose_monitor
+      emit_monitor_event(type, detail: detail)
     end
 
 
@@ -79,11 +116,41 @@ module NNQ
     def peer_connected = @lifecycle.peer_connected
 
 
+    # @return [Async::Promise] resolves when all peers have disconnected
+    #   (edge-triggered, after at least one peer connected)
+    def all_peers_gone = @lifecycle.all_peers_gone
+
+
+    # Called by ConnectionLifecycle teardown. Resolves `all_peers_gone`
+    # if the connection set is now empty and we had peers.
+    def resolve_all_peers_gone_if_empty
+      @lifecycle.resolve_all_peers_gone_if_empty(@connections)
+    end
+
+
+    # @return [Boolean]
+    def reconnect_enabled = @lifecycle.reconnect_enabled
+
+
+    # Disables or re-enables automatic reconnect. nnq has no reconnect
+    # loop yet, so this is forward-looking — {TransientMonitor} flips
+    # it before draining.
+    def reconnect_enabled=(value)
+      @lifecycle.reconnect_enabled = value
+    end
+
+
+    # Closes only the recv side. Buffered messages drain, then
+    # {Socket#receive} returns nil. Send side remains operational.
+    def close_read
+      @routing.close_read if @routing.respond_to?(:close_read)
+    end
+
+
     # Stores the parent Async task that long-lived NNQ fibers will
     # attach to. The caller (Socket) is responsible for picking the
     # right one (the user's current task, or Reactor.root_task).
-    def capture_parent_task(task)
-      on_io_thread = task.equal?(Reactor.root_task)
+    def capture_parent_task(task, on_io_thread:)
       @lifecycle.capture_parent_task(task, on_io_thread: on_io_thread)
     end
 
@@ -97,17 +164,42 @@ module NNQ
       end
       @listeners << listener
       @last_endpoint = listener.endpoint
+      emit_monitor_event(:listening, endpoint: @last_endpoint)
     end
 
 
-    # Connects to +endpoint+. Synchronous on first attempt; reconnect
-    # is wired in Phase 1.1.
+    # Connects to +endpoint+. Non-blocking for tcp:// and ipc:// — the
+    # actual dial happens inside a background reconnect task that
+    # retries with exponential back-off until the peer becomes
+    # reachable. Inproc connect is synchronous and instant.
     def connect(endpoint)
-      transport = transport_for(endpoint)
-      transport.connect(endpoint, self)
+      @dialed << endpoint
       @last_endpoint = endpoint
-    rescue Errno::ECONNREFUSED, Errno::EHOSTUNREACH => e
-      raise Error, "could not connect to #{endpoint}: #{e.class}: #{e.message}"
+      if endpoint.start_with?("inproc://")
+        transport_for(endpoint).connect(endpoint, self)
+      else
+        emit_monitor_event(:connect_delayed, endpoint: endpoint)
+        Reconnect.schedule(endpoint, @options, @lifecycle.parent_task, self, delay: 0)
+      end
+    end
+
+
+    # Schedules a reconnect for +endpoint+ if auto-reconnect is enabled
+    # and the endpoint is still in the dialed set. Called from the
+    # connection lifecycle's `lost!` path.
+    def maybe_reconnect(endpoint)
+      return unless endpoint && @dialed.include?(endpoint)
+      return unless @lifecycle.alive? && @lifecycle.reconnect_enabled
+      return if endpoint.start_with?("inproc://")
+      Reconnect.schedule(endpoint, @options, @lifecycle.parent_task, self)
+    end
+
+
+    # Public so {Reconnect} can dial directly without re-deriving the
+    # transport from the URL each iteration.
+    def transport_for(endpoint)
+      scheme = endpoint[/\A([a-z+]+):\/\//i, 1] or raise Error, "no scheme: #{endpoint}"
+      TRANSPORTS[scheme] or raise Error, "unsupported transport: #{scheme}"
     end
 
 
@@ -150,6 +242,8 @@ module NNQ
       return unless @lifecycle.alive?
       @lifecycle.start_closing!
       @listeners.each(&:stop)
+      @tasks.each { |t| t.stop rescue nil }
+      @tasks.clear
       drain_send_queue(@options.linger)
       @routing.close if @routing.respond_to?(:close)
       # Tear down each remaining connection via its lifecycle. The
@@ -160,6 +254,8 @@ module NNQ
       # Unblock anyone waiting on peer_connected when the socket is
       # closed before a peer ever arrived.
       @lifecycle.peer_connected.resolve(nil) unless @lifecycle.peer_connected.resolved?
+      emit_monitor_event(:closed)
+      close_monitor_queue
     end
 
 
@@ -171,6 +267,12 @@ module NNQ
 
 
     private
+
+    def close_monitor_queue
+      return unless @monitor_queue
+      @monitor_queue.enqueue(nil)
+    end
+
 
     def drain_send_queue(timeout)
       return unless @routing.respond_to?(:send_queue_drained?)
@@ -187,19 +289,14 @@ module NNQ
       @lifecycle.parent_task.async(annotation: "nnq recv #{conn.endpoint}") do
         loop do
           body = conn.receive_message
+          emit_verbose_monitor_event(:message_received, body: body)
           @routing.enqueue(body, conn)
-        rescue EOFError, IOError, Errno::ECONNRESET, Async::Stop
+        rescue *CONNECTION_LOST, Async::Stop
           break
         end
       ensure
         handle_connection_lost(conn)
       end
-    end
-
-
-    def transport_for(endpoint)
-      scheme = endpoint[/\A([a-z+]+):\/\//i, 1] or raise Error, "no scheme: #{endpoint}"
-      TRANSPORTS[scheme] or raise Error, "unsupported transport: #{scheme}"
     end
   end
 end

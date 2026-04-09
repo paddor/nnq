@@ -3,6 +3,14 @@
 require "protocol/sp"
 
 module NNQ
+  # Freezes module-level state so NNQ sockets can be used inside Ractors.
+  # Call this once before spawning any Ractors that create NNQ sockets.
+  #
+  def self.freeze_for_ractors!
+    Engine::CONNECTION_FAILED.freeze
+    Engine::CONNECTION_LOST.freeze
+    Engine::TRANSPORTS.freeze
+  end
 end
 
 require_relative "nnq/version"

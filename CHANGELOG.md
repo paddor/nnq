@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.4.0 — 2026-04-09
+
+- `Socket#all_peers_gone` — `Async::Promise` resolving the first time
+  the connection set becomes empty after at least one peer connected.
+  Edge-triggered, ported from OMQ.
+- `Socket#close_read` — closes the recv side only. Buffered messages
+  drain, then `#receive` returns `nil`. Send side stays operational.
+- `Socket#reconnect_enabled` / `#reconnect_enabled=` — flipped by
+  transient-mode consumers before draining to prevent the background
+  reconnect loop from revivifying a dying socket.
+- `Socket#monitor` / `NNQ::MonitorEvent` — lifecycle event stream
+  emitting `:listening`, `:connect_delayed`, `:connect_retried`,
+  `:connected`, `:handshake_succeeded`/`_failed`, `:disconnected`,
+  `:closed`, and (when `verbose: true`) `:message_sent` /
+  `:message_received`. Ported from OMQ, minus the heartbeat/mechanism
+  events nnq doesn't have.
+- Background reconnect — `NNQ::Engine::Reconnect` runs a `transient: true`
+  task per dialed endpoint, retrying with exponential back-off bounded
+  by `options.reconnect_interval` (Numeric or Range). `connect` becomes
+  non-blocking for `tcp://` and `ipc://`; `inproc://` stays synchronous.
+  `CONNECTION_FAILED` / `CONNECTION_LOST` mutable-at-load-time registries
+  let plugins append transport-specific error classes.
+- `NNQ::PULL#receive` honors `options.read_timeout` via
+  `Fiber.scheduler.with_timeout`. Previously the option was declared
+  but inert.
+- `NNQ.freeze_for_ractors!` — freezes `Engine::CONNECTION_FAILED`,
+  `Engine::CONNECTION_LOST`, and `Engine::TRANSPORTS` so NNQ sockets
+  can be used from non-main Ractors. Required for nnq-cli's `pipe -P N`
+  parallel worker mode.
+
 ## 0.3.0 — 2026-04-09
 
 - `Socket#peer_connected` — `Async::Promise` that resolves with the

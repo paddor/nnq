@@ -123,6 +123,7 @@ module NNQ
           conn.write_messages(batch)
         end
         conn.flush
+        batch.each { |body| @engine.emit_verbose_monitor_event(:message_sent, body: body) }
       end
     end
   end

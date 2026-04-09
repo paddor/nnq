@@ -71,23 +71,26 @@ module NNQ
         sp.handshake!
         ready!(NNQ::Connection.new(sp, endpoint: @endpoint))
         @conn
-      rescue
+      rescue => e
+        @engine.emit_monitor_event(:handshake_failed, endpoint: @endpoint, detail: { error: e })
         io.close rescue nil
         transition!(:closed) unless @state == :closed
         raise
       end
 
 
-      # Transitions to :closed, removing the connection from the engine
-      # and notifying the routing strategy. Idempotent.
+      # Unexpected loss of an established connection. Tears down and
+      # asks the engine to schedule a reconnect (if the endpoint is in
+      # the dialed set and reconnect is still enabled).
       def lost!
+        ep = @endpoint
         tear_down!
+        @engine.maybe_reconnect(ep)
       end
 
 
-      # Alias for lost!. Kept as a separate method for parity with OMQ,
-      # where the distinction drives reconnect scheduling. nnq has no
-      # reconnect yet, so the two behave identically.
+      # Deliberate close (engine shutdown or routing eviction). Does
+      # not trigger reconnect.
       def close!
         tear_down!
       end
@@ -102,10 +105,13 @@ module NNQ
         begin
           @engine.routing.connection_added(conn) if @engine.routing.respond_to?(:connection_added)
         rescue ConnectionRejected
+          @engine.emit_monitor_event(:connection_rejected, endpoint: @endpoint)
           tear_down!
           raise
         end
         @engine.lifecycle.peer_connected.resolve(conn) unless @engine.lifecycle.peer_connected.resolved?
+        @engine.emit_monitor_event(:handshake_succeeded, endpoint: @endpoint)
+        @engine.emit_monitor_event(:connected, endpoint: @endpoint)
         @engine.new_pipe.signal
       end
 
@@ -117,6 +123,8 @@ module NNQ
           @engine.connections.delete(@conn)
           @engine.routing.connection_removed(@conn) if @engine.routing.respond_to?(:connection_removed)
           @conn.close rescue nil
+          @engine.emit_monitor_event(:disconnected, endpoint: @endpoint)
+          @engine.resolve_all_peers_gone_if_empty
         end
       end
 

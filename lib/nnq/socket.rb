@@ -1,7 +1,10 @@
 # frozen_string_literal: true
 
+require "async/queue"
+
 require_relative "options"
 require_relative "engine"
+require_relative "monitor_event"
 require_relative "reactor"
 
 module NNQ
@@ -62,6 +65,52 @@ module NNQ
     def peer_connected = @engine.peer_connected
 
 
+    # Resolves with `true` the first time all peers have disconnected
+    # (after at least one peer was connected). Edge-triggered.
+    def all_peers_gone = @engine.all_peers_gone
+
+
+    def reconnect_enabled  = @engine.reconnect_enabled
+    def reconnect_enabled=(value)
+      @engine.reconnect_enabled = value
+    end
+
+
+    # Closes the recv side only. Buffered messages drain, then
+    # {#receive} returns nil. Send side stays open.
+    def close_read
+      Reactor.run { @engine.close_read }
+      nil
+    end
+
+
+    # Yields lifecycle events for this socket until it's closed or
+    # the returned task is stopped.
+    #
+    # @param verbose [Boolean] when true, also emits :message_sent /
+    #   :message_received events
+    # @yield [event]
+    # @yieldparam event [MonitorEvent]
+    # @return [Async::Task]
+    def monitor(verbose: false, &block)
+      ensure_parent_task
+      queue = Async::Queue.new
+      @engine.monitor_queue   = queue
+      @engine.verbose_monitor = verbose
+      Reactor.run do
+        @engine.spawn_task(annotation: "nnq monitor") do
+          while (event = queue.dequeue)
+            block.call(event)
+          end
+        rescue Async::Stop
+        ensure
+          @engine.monitor_queue = nil
+          block.call(MonitorEvent.new(type: :monitor_stopped))
+        end
+      end
+    end
+
+
     private
 
     def ensure_parent_task
@@ -70,9 +119,9 @@ module NNQ
       # that Reactor wraps each dispatched block in. Inside an Async
       # reactor, the current task is the right parent.
       if Async::Task.current?
-        @engine.capture_parent_task(Async::Task.current)
+        @engine.capture_parent_task(Async::Task.current, on_io_thread: false)
       else
-        @engine.capture_parent_task(Reactor.root_task)
+        @engine.capture_parent_task(Reactor.root_task, on_io_thread: true)
       end
     end
 

@@ -21,14 +21,8 @@ describe "nngcat interop" do
                     out: out.path, err: File::NULL)
 
     Sync do
-      # Wait until nngcat is listening.
-      push = nil
-      20.times do
-        push = NNQ::PUSH.connect("tcp://127.0.0.1:#{port}") rescue (sleep(0.05); nil)
-        break if push
-      end
-      flunk "could not connect to nngcat" unless push
-
+      push = NNQ::PUSH.connect("tcp://127.0.0.1:#{port}")
+      push.peer_connected.wait
       push.send("alpha")
       push.send("beta")
       push.send("gamma")
@@ -80,12 +74,8 @@ describe "nngcat interop" do
                       out: out.path, err: File::NULL)
 
       Sync do
-        push = nil
-        20.times do
-          push = NNQ::PUSH.connect(endpoint) rescue (sleep(0.05); nil)
-          break if push
-        end
-        flunk "could not connect to nngcat over ipc" unless push
+        push = NNQ::PUSH.connect(endpoint)
+        push.peer_connected.wait
         push.send("alpha")
         push.send("beta")
         push.send("gamma")
@@ -136,12 +126,8 @@ describe "nngcat interop" do
                     out: out.path, err: File::NULL)
 
     Sync do
-      pair = nil
-      20.times do
-        pair = NNQ::PAIR.connect("tcp://127.0.0.1:#{port}") rescue (sleep(0.05); nil)
-        break if pair
-      end
-      flunk "could not connect to nngcat" unless pair
+      pair = NNQ::PAIR.connect("tcp://127.0.0.1:#{port}")
+      pair.peer_connected.wait
       pair.send("hello-pair")
       pair.close
     end
@@ -162,12 +148,8 @@ describe "nngcat interop" do
                     out: File::NULL, err: File::NULL)
 
     Sync do
-      req = nil
-      20.times do
-        req = NNQ::REQ.connect("tcp://127.0.0.1:#{port}") rescue (sleep(0.05); nil)
-        break if req
-      end
-      flunk "could not connect to nngcat" unless req
+      req = NNQ::REQ.connect("tcp://127.0.0.1:#{port}")
+      req.peer_connected.wait
       reply = req.send_request("ping")
       assert_equal "pong", reply
       req.close

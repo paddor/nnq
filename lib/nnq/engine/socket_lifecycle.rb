@@ -37,12 +37,24 @@ module NNQ
       #   (or nil if the socket closes before anyone connects)
       attr_reader :peer_connected
 
+      # @return [Async::Promise] resolves with true the first time the
+      #   connection set becomes empty after at least one peer connected.
+      #   Edge-triggered: does not re-arm on reconnect.
+      attr_reader :all_peers_gone
+
+      # @return [Boolean] when false, the engine must not schedule new
+      #   reconnect attempts. Default true. nnq has no automatic
+      #   reconnect loop yet, so this currently just records intent.
+      attr_accessor :reconnect_enabled
+
 
       def initialize
-        @state          = :new
-        @parent_task    = nil
-        @on_io_thread   = false
-        @peer_connected = Async::Promise.new
+        @state             = :new
+        @parent_task       = nil
+        @on_io_thread      = false
+        @peer_connected    = Async::Promise.new
+        @all_peers_gone    = Async::Promise.new
+        @reconnect_enabled = true
       end
 
 
@@ -78,6 +90,16 @@ module NNQ
       # never-opened sockets).
       def finish_closing!
         transition!(:closed)
+      end
+
+
+      # Resolves `all_peers_gone` if we had peers and now have none.
+      # Idempotent.
+      # @param connections [Hash] current connection map
+      def resolve_all_peers_gone_if_empty(connections)
+        return unless @peer_connected.resolved? && connections.empty?
+        return if @all_peers_gone.resolved?
+        @all_peers_gone.resolve(true)
       end
 
 

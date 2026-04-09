@@ -34,7 +34,13 @@ module NNQ
   #
   class PULL < Socket
     def receive
-      Reactor.run { @engine.routing.receive }
+      Reactor.run do
+        if (timeout = @engine.options.read_timeout)
+          Fiber.scheduler.with_timeout(timeout) { @engine.routing.receive }
+        else
+          @engine.routing.receive
+        end
+      end
     end
 
 

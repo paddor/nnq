@@ -48,6 +48,11 @@ module NNQ
         @queue.enqueue(nil)
       end
 
+
+      def close_read
+        @queue.enqueue(nil)
+      end
+
       private
 
       def matches?(body)
