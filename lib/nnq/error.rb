@@ -6,4 +6,5 @@ module NNQ
   class ProtocolError   < Error; end
   class TimeoutError    < Error; end
   class RequestCancelled < Error; end
+  class ConnectionRejected < Error; end
 end

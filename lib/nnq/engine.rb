@@ -3,20 +3,23 @@
 require "async"
 require "async/clock"
 require "protocol/sp"
+require_relative "error"
 require_relative "connection"
 require_relative "reactor"
+require_relative "engine/socket_lifecycle"
+require_relative "engine/connection_lifecycle"
 require_relative "transport/tcp"
 require_relative "transport/ipc"
 require_relative "transport/inproc"
 
 module NNQ
-  # Per-socket orchestrator. Owns a parent Async task, the connection
-  # array (mutated in place so routing strategies can hold a stable
-  # `cycle` enumerator), the transport registry, and the lifecycle of
-  # accepted/dialed pipes.
+  # Per-socket orchestrator. Owns the listener set, the connection map
+  # (keyed on NNQ::Connection, with per-connection ConnectionLifecycle
+  # values), the transport registry, and the socket-level state machine
+  # via {SocketLifecycle}.
   #
-  # Mirrors omq's Engine in shape but is much smaller because there's
-  # no HWM, no per-pipe queues, no command frames, no mechanisms.
+  # Mirrors OMQ's Engine in shape but is much smaller because there's
+  # no HWM bookkeeping, no mechanisms, no heartbeat, no monitor queue.
   #
   class Engine
     TRANSPORTS = {
@@ -26,18 +29,20 @@ module NNQ
     }
 
 
+    # @return [Integer] our SP protocol id (e.g. Protocols::PUSH_V0)
+    attr_reader :protocol
+
     # @return [Options]
     attr_reader :options
 
-    # @return [Array<Connection>] mutated in place; routing holds a stable cycle on it
+    # @return [Hash{NNQ::Connection => ConnectionLifecycle}]
     attr_reader :connections
 
-    # @return [Async::Task, nil]
-    attr_reader :parent_task
+    # @return [SocketLifecycle]
+    attr_reader :lifecycle
 
     # @return [String, nil]
     attr_reader :last_endpoint
-
 
     # @return [Async::Condition] signaled when a new pipe is registered
     attr_reader :new_pipe
@@ -46,25 +51,36 @@ module NNQ
     # @param protocol [Integer] our SP protocol id (e.g. Protocols::PUSH_V0)
     # @param options [Options]
     # @yieldparam engine [Engine] used by the caller to build a routing
-    #   strategy with access to the engine's stable connection array
+    #   strategy with access to the engine's connection map
     def initialize(protocol:, options:)
       @protocol      = protocol
       @options       = options
-      @connections   = []
+      @connections   = {}
       @listeners     = []
-      @parent_task   = nil
+      @lifecycle     = SocketLifecycle.new
       @last_endpoint = nil
       @new_pipe      = Async::Condition.new
-      @closed        = false
       @routing       = yield(self)
     end
+
+
+    # @return [Routing strategy]
+    attr_reader :routing
+
+
+    # @return [Async::Task, nil]
+    def parent_task = @lifecycle.parent_task
+
+
+    def closed? = @lifecycle.closed?
 
 
     # Stores the parent Async task that long-lived NNQ fibers will
     # attach to. The caller (Socket) is responsible for picking the
     # right one (the user's current task, or Reactor.root_task).
     def capture_parent_task(task)
-      @parent_task ||= task
+      on_io_thread = task.equal?(Reactor.root_task)
+      @lifecycle.capture_parent_task(task, on_io_thread: on_io_thread)
     end
 
 
@@ -72,7 +88,7 @@ module NNQ
     def bind(endpoint)
       transport = transport_for(endpoint)
       listener  = transport.bind(endpoint, self)
-      listener.start_accept_loop(@parent_task) do |io, framing = :tcp|
+      listener.start_accept_loop(@lifecycle.parent_task) do |io, framing = :tcp|
         handle_accepted(io, endpoint: endpoint, framing: framing)
       end
       @listeners << listener
@@ -93,61 +109,57 @@ module NNQ
 
     # Called by transports for each accepted client connection.
     def handle_accepted(io, endpoint:, framing: :tcp)
-      sp = Protocol::SP::Connection.new(io, protocol: @protocol, max_message_size: @options.max_message_size, framing: framing)
-      sp.handshake!
-      register(Connection.new(sp, endpoint: endpoint))
+      lifecycle = ConnectionLifecycle.new(self, endpoint: endpoint, framing: framing)
+      lifecycle.handshake!(io)
+      spawn_recv_loop(lifecycle.conn) if @routing.respond_to?(:enqueue) && @connections.key?(lifecycle.conn)
+    rescue ConnectionRejected
+      # routing rejected this peer (e.g. PAIR already bonded) — lifecycle cleaned up
     rescue => e
-      io.close rescue nil
       warn("nnq: handshake failed for #{endpoint}: #{e.class}: #{e.message}") if $DEBUG
     end
 
 
     # Called by transports for each dialed connection.
     def handle_connected(io, endpoint:, framing: :tcp)
-      sp = Protocol::SP::Connection.new(io, protocol: @protocol, max_message_size: @options.max_message_size, framing: framing)
-      sp.handshake!
-      register(Connection.new(sp, endpoint: endpoint))
+      lifecycle = ConnectionLifecycle.new(self, endpoint: endpoint, framing: framing)
+      lifecycle.handshake!(io)
+      spawn_recv_loop(lifecycle.conn) if @routing.respond_to?(:enqueue) && @connections.key?(lifecycle.conn)
+    rescue ConnectionRejected
+      # unusual on connect side, but handled identically
     end
 
 
-    # @return [Routing strategy]
-    attr_reader :routing
-
-
-    # Spawns a task under the engine's parent task. Used by routing
+    # Spawns a task under the socket's parent task. Used by routing
     # strategies (e.g. PUSH send pump) to attach long-lived fibers to
     # the engine's lifecycle without going through transient: true.
-    #
-    # @param annotation [String]
-    # @yield pump body
-    # @return [Async::Task]
     def spawn_task(annotation:, &block)
-      @parent_task.async(annotation: annotation, &block)
+      @lifecycle.parent_task.async(annotation: annotation, &block)
     end
 
 
     # Closes the engine: stops listeners, drains the send queue subject
     # to linger, stops routing pumps (which by now are parked on the
-    # empty queue), then closes connections (which wakes recv loops
-    # with EOF). Order matters — closing connections first would force
-    # mid-flush pumps to abort with IOError.
+    # empty queue), then tears down every connection's lifecycle. Order
+    # matters — closing connections first would force mid-flush pumps
+    # to abort with IOError.
     def close
-      return if @closed
+      return unless @lifecycle.alive?
+      @lifecycle.start_closing!
       @listeners.each(&:stop)
       drain_send_queue(@options.linger)
       @routing.close if @routing.respond_to?(:close)
-      @closed = true
-      @connections.each(&:close)
+      # Tear down each remaining connection via its lifecycle. The
+      # collection mutates during iteration, so snapshot the values.
+      @connections.values.each(&:close!)
+      @lifecycle.finish_closing!
       @new_pipe.signal
     end
 
 
     # Called by routing pumps (or the recv loop) when their connection
-    # has died. Idempotent.
+    # has died. Idempotent via the lifecycle state guard.
     def handle_connection_lost(conn)
-      return unless @connections.delete(conn)
-      @routing.connection_removed(conn) if @routing.respond_to?(:connection_removed)
-      conn.close
+      @connections[conn]&.lost!
     end
 
 
@@ -164,21 +176,8 @@ module NNQ
     end
 
 
-    def register(conn)
-      @connections << conn
-      @routing.connection_added(conn) if @routing.respond_to?(:connection_added)
-      # connection_added may have rejected the conn (e.g. PAIR's
-      # first-pipe-wins) and routed it through handle_connection_lost,
-      # which removes it from @connections. Don't spawn a recv loop in
-      # that case.
-      return unless @connections.include?(conn)
-      spawn_recv_loop(conn) if @routing.respond_to?(:enqueue)
-      @new_pipe.signal
-    end
-
-
     def spawn_recv_loop(conn)
-      @parent_task.async(annotation: "nnq recv #{conn.endpoint}") do
+      @lifecycle.parent_task.async(annotation: "nnq recv #{conn.endpoint}") do
         loop do
           body = conn.receive_message
           @routing.enqueue(body, conn)

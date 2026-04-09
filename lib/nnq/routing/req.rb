@@ -93,7 +93,7 @@ module NNQ
 
       def pick_peer
         loop do
-          conns = @engine.connections
+          conns = @engine.connections.keys
           if conns.empty?
             @engine.new_pipe.wait
             next

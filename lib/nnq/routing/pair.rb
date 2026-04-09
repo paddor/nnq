@@ -47,14 +47,11 @@ module NNQ
       end
 
 
-      # First-pipe-wins. If we already have a peer, signal the engine
-      # to drop the new connection.
+      # First-pipe-wins. Raising {ConnectionRejected} tells the
+      # ConnectionLifecycle to tear down the just-registered connection
+      # without ever exposing it to pumps.
       def connection_added(conn)
-        if @peer
-          conn.close
-          @engine.handle_connection_lost(conn)
-          return
-        end
+        raise ConnectionRejected, "PAIR socket already has a peer" if @peer
         @peer = conn
         spawn_send_pump_for(conn)
       end
