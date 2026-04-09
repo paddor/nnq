@@ -8,7 +8,7 @@ BenchHelper.run("PAIR", dir: __dir__, peer_counts: [1]) do |transport, ep, _peer
   receiver = NNQ::PAIR.bind(ep)
   ep       = BenchHelper.resolve_endpoint(transport, receiver)
   sender   = NNQ::PAIR.connect(ep)
-  BenchHelper.wait_connected(receiver) unless transport == "inproc"
+  BenchHelper.wait_connected(sender) unless transport == "inproc"
 
   begin
     BenchHelper.measure(receiver, [sender], payload)

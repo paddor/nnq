@@ -18,7 +18,7 @@ BenchHelper.run("PUB/SUB", dir: __dir__, peer_counts: [3]) do |transport, ep, pe
     sub.subscribe("")
     sub
   end
-  BenchHelper.wait_connected(pub, n: peers) unless transport == "inproc"
+  BenchHelper.wait_connected(subs) unless transport == "inproc"
 
   burst = ->(k) {
     send_barrier = Async::Barrier.new

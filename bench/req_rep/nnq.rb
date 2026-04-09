@@ -9,6 +9,7 @@ BenchHelper.run("REQ/REP", dir: __dir__, peer_counts: [1]) do |transport, ep, _p
     rep = NNQ::REP.bind(ep)
     ep  = BenchHelper.resolve_endpoint(transport, rep)
     req = NNQ::REQ.connect(ep)
+    BenchHelper.wait_connected(req) unless transport == "inproc"
 
     responder = task.async do
       loop do

@@ -20,6 +20,24 @@ ruby bench/report.rb --update-readme
 ```
 
 <!-- BEGIN push_pull -->
+### 1 peer
+
+| Message size | inproc | ipc | tcp |
+|---|---|---|---|
+| 64 B | 529.4k msg/s / 33.9 MB/s | 481.6k msg/s / 30.8 MB/s | 558.4k msg/s / 35.7 MB/s |
+| 1 KiB | 357.7k msg/s / 366 MB/s | 344.0k msg/s / 352 MB/s | 349.1k msg/s / 357 MB/s |
+| 8 KiB | 124.7k msg/s / 1.02 GB/s | 122.9k msg/s / 1.01 GB/s | 120.4k msg/s / 986 MB/s |
+| 64 KiB | 21.9k msg/s / 1.43 GB/s | 20.0k msg/s / 1.31 GB/s | 17.6k msg/s / 1.15 GB/s |
+
+### 3 peers
+
+| Message size | inproc | ipc | tcp |
+|---|---|---|---|
+| 64 B | 570.5k msg/s / 36.5 MB/s | 487.0k msg/s / 31.2 MB/s | 556.5k msg/s / 35.6 MB/s |
+| 1 KiB | 323.1k msg/s / 331 MB/s | 317.0k msg/s / 325 MB/s | 317.3k msg/s / 325 MB/s |
+| 8 KiB | 125.0k msg/s / 1.02 GB/s | 124.0k msg/s / 1.02 GB/s | 119.3k msg/s / 978 MB/s |
+| 64 KiB | 21.2k msg/s / 1.39 GB/s | 20.1k msg/s / 1.32 GB/s | 18.5k msg/s / 1.21 GB/s |
+
 <!-- END push_pull -->
 
 ## Round-trip latency (REQ/REP, µs)
@@ -35,6 +53,13 @@ Round-trip = one `req.send_request` (which sends + blocks for the reply).
 Latency is `1 / msgs_s` converted to µs.
 
 <!-- BEGIN req_rep -->
+| Message size | inproc | ipc | tcp |
+|---|---|---|---|
+| 64 B | 36.2 µs | 35.2 µs | 52.0 µs |
+| 1 KiB | 37.5 µs | 38.5 µs | 54.5 µs |
+| 8 KiB | 49.3 µs | 49.0 µs | 65.3 µs |
+| 64 KiB | 119 µs | 123 µs | 156 µs |
+
 <!-- END req_rep -->
 
 ## io_uring

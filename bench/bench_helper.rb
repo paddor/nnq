@@ -179,16 +179,13 @@ module BenchHelper
     { n: n, elapsed: elapsed, mbps: mbps, msgs_s: msgs_s }
   end
 
-  # Polls until +socket+ reports at least +n+ live peers. nnq doesn't
-  # expose a peer_connected condition, but `connection_count` is cheap.
-  def wait_connected(socket, n: 1, timeout: 2.0)
-    deadline = Async::Clock.now + timeout
-    until socket.connection_count >= n
-      if Async::Clock.now > deadline
-        raise "wait_connected timeout: #{socket.connection_count}/#{n}"
-      end
-      sleep 0.005
-    end
+  # Waits until each of +sockets+ has its first connected peer via
+  # their `peer_connected` promise. Each socket's promise tracks its
+  # own first pipe, so this works for both sides: waiting on a single
+  # bound socket with multiple dialers means polling, whereas waiting
+  # on each dialer's own promise is edge-triggered.
+  def wait_connected(*sockets)
+    sockets.flatten.each { |s| s.peer_connected.wait }
   end
 
   def append_result(pattern, transport, peers, msg_size, msg_count, elapsed, mbps, msgs_s)

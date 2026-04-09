@@ -9,7 +9,7 @@ BenchHelper.run("PUSH/PULL", dir: __dir__, peer_counts: [1, 3]) do |transport, e
   ep   = BenchHelper.resolve_endpoint(transport, pull)
 
   pushes = peers.times.map { NNQ::PUSH.connect(ep) }
-  BenchHelper.wait_connected(pull, n: peers) unless transport == "inproc"
+  BenchHelper.wait_connected(pushes) unless transport == "inproc"
 
   begin
     BenchHelper.measure(pull, pushes, payload)
