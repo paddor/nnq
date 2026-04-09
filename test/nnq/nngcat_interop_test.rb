@@ -65,5 +65,85 @@ module NNQ
     ensure
       Process.kill("KILL", nng_pid) rescue nil
     end
+
+
+    # NNQ::PAIR dials, nngcat --pair0 listens.
+    def test_nnq_pair_to_nngcat_pair
+      out = Tempfile.new("nng-pair")
+      out.close
+      port = 5573
+
+      nng_pid = spawn("nngcat", "--pair0", "--listen", "tcp://127.0.0.1:#{port}",
+                      "--count", "1", "--quoted",
+                      out: out.path, err: File::NULL)
+
+      Sync do
+        pair = nil
+        20.times do
+          pair = NNQ::PAIR.connect("tcp://127.0.0.1:#{port}") rescue (sleep(0.05); nil)
+          break if pair
+        end
+        flunk "could not connect to nngcat" unless pair
+        pair.send("hello-pair")
+        pair.close
+      end
+
+      Process.wait(nng_pid)
+      assert_match(/hello-pair/, File.read(out.path))
+    ensure
+      out&.unlink
+      Process.kill("KILL", nng_pid) rescue nil
+    end
+
+
+    # NNQ::REQ dials, nngcat --rep0 listens and echoes.
+    def test_nnq_req_to_nngcat_rep
+      port = 5574
+      nng_pid = spawn("nngcat", "--rep0", "--listen", "tcp://127.0.0.1:#{port}",
+                      "--data", "pong",
+                      out: File::NULL, err: File::NULL)
+
+      Sync do
+        req = nil
+        20.times do
+          req = NNQ::REQ.connect("tcp://127.0.0.1:#{port}") rescue (sleep(0.05); nil)
+          break if req
+        end
+        flunk "could not connect to nngcat" unless req
+        reply = req.send_request("ping")
+        assert_equal "pong", reply
+        req.close
+      end
+
+      Process.kill("KILL", nng_pid) rescue nil
+      Process.wait(nng_pid) rescue nil
+    ensure
+      Process.kill("KILL", nng_pid) rescue nil
+    end
+
+
+    # NNQ::REP listens, nngcat --req0 dials and sends a request.
+    def test_nngcat_req_to_nnq_rep
+      port = 5575
+      out = Tempfile.new("nng-req")
+      out.close
+      nng_pid = nil
+      Sync do
+        rep = NNQ::REP.bind("tcp://127.0.0.1:#{port}")
+        nng_pid = spawn("nngcat", "--req0", "--dial", "tcp://127.0.0.1:#{port}",
+                        "--data", "ping", "--quoted",
+                        out: out.path, err: File::NULL)
+        body = rep.receive
+        assert_equal "ping", body
+        rep.send_reply("pong")
+      ensure
+        rep&.close
+      end
+      Process.wait(nng_pid)
+      assert_match(/pong/, File.read(out.path))
+    ensure
+      out&.unlink
+      Process.kill("KILL", nng_pid) rescue nil
+    end
   end
 end

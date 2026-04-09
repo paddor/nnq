@@ -123,14 +123,17 @@ module NNQ
 
 
     # Closes the engine: stops listeners, drains the send queue subject
-    # to linger, then closes connections and stops routing pumps.
+    # to linger, stops routing pumps (which by now are parked on the
+    # empty queue), then closes connections (which wakes recv loops
+    # with EOF). Order matters — closing connections first would force
+    # mid-flush pumps to abort with IOError.
     def close
       return if @closed
       @listeners.each(&:stop)
       drain_send_queue(@options.linger)
+      @routing.close if @routing.respond_to?(:close)
       @closed = true
       @connections.each(&:close)
-      @routing.close if @routing.respond_to?(:close)
       @new_pipe.signal
     end
 
@@ -160,6 +163,11 @@ module NNQ
     def register(conn)
       @connections << conn
       @routing.connection_added(conn) if @routing.respond_to?(:connection_added)
+      # connection_added may have rejected the conn (e.g. PAIR's
+      # first-pipe-wins) and routed it through handle_connection_lost,
+      # which removes it from @connections. Don't spawn a recv loop in
+      # that case.
+      return unless @connections.include?(conn)
       spawn_recv_loop(conn) if @routing.respond_to?(:enqueue)
       @new_pipe.signal
     end
@@ -169,7 +177,7 @@ module NNQ
       @parent_task.async(annotation: "nnq recv #{conn.endpoint}") do
         loop do
           body = conn.receive_message
-          @routing.enqueue(body)
+          @routing.enqueue(body, conn)
         rescue EOFError, IOError, Errno::ECONNRESET, Async::Stop
           break
         end

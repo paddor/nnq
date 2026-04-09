@@ -17,7 +17,7 @@ module NNQ
       end
 
 
-      def enqueue(body)
+      def enqueue(body, _conn = nil)
         @queue.enqueue(body)
       end
 

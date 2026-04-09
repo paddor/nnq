@@ -38,6 +38,17 @@ module NNQ
     end
 
 
+    # Writes one message AND flushes immediately. Used by REQ/REP where
+    # each call is request-paced and there's nothing to batch.
+    #
+    # @param body [String]
+    # @return [void]
+    def send_message(body)
+      raise ClosedError, "connection closed" if @closed
+      @sp.send_message(body)
+    end
+
+
     # Flushes the SP connection's send buffer to the socket.
     #
     # @return [void]
