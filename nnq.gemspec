@@ -9,8 +9,9 @@ Gem::Specification.new do |s|
   s.email    = ["paddor@gmail.com"]
   s.summary  = "Pure Ruby NNG (Scalability Protocols) on Async"
   s.description = "Pure Ruby implementation of nanomsg's Scalability Protocols " \
-                  "(SP) on top of async + io-stream. No HWM, opportunistic " \
-                  "batching, wire-compatible with libnng over inproc/ipc/tcp."
+                  "(SP) on top of async + io-stream. Per-socket HWM, " \
+                  "opportunistic batching, wire-compatible with libnng over " \
+                  "inproc/ipc/tcp."
   s.homepage = "https://github.com/paddor/nnq"
   s.license  = "ISC"
 
