@@ -14,10 +14,12 @@ module NNQ
     # exactly one id.
     #
     # Semantics (cooked mode, what this implements):
-    # - Single in-flight request per socket. The user fiber sends, the
-    #   call blocks until the matching reply comes back, then unblocks.
-    #   Concurrent calls raise (matches nng cooked req0 — use nng_ctx
-    #   for parallelism, which we don't model here).
+    # - At most one in-flight request per socket. Issuing a new
+    #   send_request while a previous one is still waiting for its
+    #   reply cancels the previous one: the blocked caller wakes up
+    #   with a {NNQ::RequestCancelled} error and the late reply (if
+    #   any) is silently dropped. This matches nng cooked req0, where
+    #   a new nng_sendmsg abandons the prior request.
     # - Reply is matched by id, NOT by pipe. Late or unmatched replies
     #   are silently dropped.
     # - Round-robin peer selection, but no retry timer (real nng resends
@@ -36,6 +38,9 @@ module NNQ
       # Sends +body+ as a request, blocks until the matching reply
       # comes back. Returns the reply payload (without the id header).
       #
+      # If another fiber issues a send_request while this call is
+      # waiting, this call raises {NNQ::RequestCancelled}.
+      #
       # @param body [String]
       # @return [String]
       def send_request(body)
@@ -43,17 +48,20 @@ module NNQ
         promise = Async::Promise.new
 
         @mutex.synchronize do
-          raise Error, "REQ socket already has a request in flight" if @outstanding
+          # Cancel any in-flight request — new send supersedes it.
+          @outstanding&.last&.reject(RequestCancelled.new("cancelled by new send_request"))
           @outstanding = [id, promise]
         end
 
-        begin
-          conn   = pick_peer
-          header = [id].pack("N")
-          conn.send_message(header + body)
-          promise.wait
-        ensure
-          @mutex.synchronize { @outstanding = nil }
+        conn   = pick_peer
+        header = [id].pack("N")
+        conn.send_message(header + body)
+        promise.wait
+      ensure
+        @mutex.synchronize do
+          # Only clear the slot if it's still ours. If a concurrent
+          # send_request already replaced it, leave the new entry alone.
+          @outstanding = nil if @outstanding && @outstanding[0] == id
         end
       end
 

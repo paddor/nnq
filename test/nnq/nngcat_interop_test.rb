@@ -2,6 +2,7 @@
 
 require_relative "../test_helper"
 require "tempfile"
+require "tmpdir"
 
 module NNQ
   class NngcatInteropTest < Minitest::Test
@@ -64,6 +65,64 @@ module NNQ
       Process.wait(nng_pid)
     ensure
       Process.kill("KILL", nng_pid) rescue nil
+    end
+
+
+    # NNQ::PUSH dials over IPC, nngcat --pull0 listens.
+    def test_nnq_push_to_nngcat_pull_over_ipc
+      Dir.mktmpdir do |dir|
+        path     = "#{dir}/nnq.sock"
+        endpoint = "ipc://#{path}"
+        out      = Tempfile.new("nng-ipc")
+        out.close
+
+        nng_pid = spawn("nngcat", "--pull0", "--listen", endpoint,
+                        "--count", "3", "--quoted",
+                        out: out.path, err: File::NULL)
+
+        Sync do
+          push = nil
+          20.times do
+            push = NNQ::PUSH.connect(endpoint) rescue (sleep(0.05); nil)
+            break if push
+          end
+          flunk "could not connect to nngcat over ipc" unless push
+          push.send("alpha")
+          push.send("beta")
+          push.send("gamma")
+          push.close
+        end
+
+        Process.wait(nng_pid)
+        contents = File.read(out.path)
+        assert_match(/alpha/, contents)
+        assert_match(/beta/,  contents)
+        assert_match(/gamma/, contents)
+      ensure
+        out&.unlink
+        Process.kill("KILL", nng_pid) rescue nil
+      end
+    end
+
+
+    # NNQ::PULL listens over IPC, nngcat --push0 dials.
+    def test_nngcat_push_to_nnq_pull_over_ipc
+      Dir.mktmpdir do |dir|
+        endpoint = "ipc://#{dir}/nnq.sock"
+        nng_pid  = nil
+        Sync do
+          pull = NNQ::PULL.bind(endpoint)
+          nng_pid = spawn("nngcat", "--push0", "--dial", endpoint,
+                          "--data", "hello-over-ipc", "--count", "1",
+                          out: File::NULL, err: File::NULL)
+          assert_equal "hello-over-ipc", pull.receive
+        ensure
+          pull&.close
+        end
+        Process.wait(nng_pid)
+      ensure
+        Process.kill("KILL", nng_pid) rescue nil
+      end
     end
 
 

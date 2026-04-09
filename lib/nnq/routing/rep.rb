@@ -15,10 +15,12 @@ module NNQ
     # echo back to the originating pipe.
     #
     # Semantics (cooked mode):
-    # - Strict alternation: receive → send → receive. Calling #send_reply
-    #   without a pending request raises; calling #receive while one is
-    #   already pending also raises (use nng_ctx for parallelism — not
-    #   modeled here).
+    # - At most one pending request at a time. Calling #receive while a
+    #   previous request is pending silently discards that request — its
+    #   backtrace is forgotten and any later #send_reply will target the
+    #   *new* request. This matches nng cooked rep0, where nng_recvmsg
+    #   after nng_recvmsg drops the earlier message.
+    # - Calling #send_reply with no pending request raises.
     # - The reply must be routed back to the same pipe the request came
     #   from. If that pipe died in the meantime, #send_reply silently
     #   drops the reply (matches nng's pipe_terminated behavior).
@@ -40,13 +42,13 @@ module NNQ
       #
       # @return [String, nil] body, or nil if the socket was closed
       def receive
+        # Any prior pending request is discarded — calling receive
+        # again without replying is how users drop unwanted requests.
+        @mutex.synchronize { @pending = nil }
         item = @recv_queue.dequeue
         return nil if item.nil?
         conn, btrace, body = item
-        @mutex.synchronize do
-          raise Error, "REP socket already has a pending request" if @pending
-          @pending = [conn, btrace]
-        end
+        @mutex.synchronize { @pending = [conn, btrace] }
         body
       end
 

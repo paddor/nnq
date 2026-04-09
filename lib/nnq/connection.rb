@@ -38,6 +38,17 @@ module NNQ
     end
 
 
+    # Writes a batch of bodies under a single SP mutex acquisition.
+    # Used by the work-stealing send pump hot path.
+    #
+    # @param bodies [Array<String>]
+    # @return [void]
+    def write_messages(bodies)
+      raise ClosedError, "connection closed" if @closed
+      @sp.write_messages(bodies)
+    end
+
+
     # Writes one message AND flushes immediately. Used by REQ/REP where
     # each call is request-paced and there's nothing to batch.
     #

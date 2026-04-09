@@ -6,6 +6,8 @@ require "protocol/sp"
 require_relative "connection"
 require_relative "reactor"
 require_relative "transport/tcp"
+require_relative "transport/ipc"
+require_relative "transport/inproc"
 
 module NNQ
   # Per-socket orchestrator. Owns a parent Async task, the connection
@@ -18,7 +20,9 @@ module NNQ
   #
   class Engine
     TRANSPORTS = {
-      "tcp" => Transport::TCP,
+      "tcp"    => Transport::TCP,
+      "ipc"    => Transport::IPC,
+      "inproc" => Transport::Inproc,
     }
 
 
@@ -68,8 +72,8 @@ module NNQ
     def bind(endpoint)
       transport = transport_for(endpoint)
       listener  = transport.bind(endpoint, self)
-      listener.start_accept_loop(@parent_task) do |io|
-        handle_accepted(io, endpoint: endpoint)
+      listener.start_accept_loop(@parent_task) do |io, framing = :tcp|
+        handle_accepted(io, endpoint: endpoint, framing: framing)
       end
       @listeners << listener
       @last_endpoint = listener.endpoint
@@ -88,8 +92,8 @@ module NNQ
 
 
     # Called by transports for each accepted client connection.
-    def handle_accepted(io, endpoint:)
-      sp = Protocol::SP::Connection.new(io, protocol: @protocol, max_message_size: @options.max_message_size)
+    def handle_accepted(io, endpoint:, framing: :tcp)
+      sp = Protocol::SP::Connection.new(io, protocol: @protocol, max_message_size: @options.max_message_size, framing: framing)
       sp.handshake!
       register(Connection.new(sp, endpoint: endpoint))
     rescue => e
@@ -99,8 +103,8 @@ module NNQ
 
 
     # Called by transports for each dialed connection.
-    def handle_connected(io, endpoint:)
-      sp = Protocol::SP::Connection.new(io, protocol: @protocol, max_message_size: @options.max_message_size)
+    def handle_connected(io, endpoint:, framing: :tcp)
+      sp = Protocol::SP::Connection.new(io, protocol: @protocol, max_message_size: @options.max_message_size, framing: framing)
       sp.handshake!
       register(Connection.new(sp, endpoint: endpoint))
     end

@@ -117,7 +117,10 @@ module NNQ
         if batch.size == 1
           conn.write_message(batch[0])
         else
-          batch.each { |body| conn.write_message(body) }
+          # Single mutex acquisition for the whole batch (batches run
+          # up to BATCH_MSG_CAP messages). The per-message pump loop
+          # would otherwise lock/unlock the SP mutex N times.
+          conn.write_messages(batch)
         end
         conn.flush
       end

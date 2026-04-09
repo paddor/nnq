@@ -5,4 +5,5 @@ module NNQ
   class ClosedError     < Error; end
   class ProtocolError   < Error; end
   class TimeoutError    < Error; end
+  class RequestCancelled < Error; end
 end
