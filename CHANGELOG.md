@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0 — 2026-04-09
+
+- `Socket#peer_connected` — `Async::Promise` that resolves with the
+  first connected peer (or `nil` on close without any peers). Ported
+  from OMQ. Held on `SocketLifecycle`, resolved by `ConnectionLifecycle`
+  on first `ready!`, and edge-triggered so callers don't need to poll.
+- `bench/` — main throughput suite ported from OMQ. Four patterns
+  (push/pull, req/rep, pair, pub/sub) across inproc, ipc, and tcp.
+  Calibration-driven burst sizing, fastest-of-3 reporting, regression
+  report with `--update-readme` to regenerate README tables.
+
 ## 0.2.0 — 2026-04-09
 
 - `NNQ::PUB` / `NNQ::SUB` with local prefix filtering (pub0/sub0).
