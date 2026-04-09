@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.0.1 — unreleased
+## 0.1.0 — 2026-04-09
 
-Initial Phase 1 slice (push0/pull0 over TCP).
+Initial Phase 1 slice (push0/pull0 over TCP). Requires Ruby >= 4.0.
 
 - `NNQ::Send::Staging` — opportunistic-batching, HWM-free send path.
 - `NNQ::Connection`, `NNQ::Engine`, `NNQ::Socket`.

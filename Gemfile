@@ -7,4 +7,4 @@ gemspec
 gem "minitest"
 gem "rake"
 
-gem "protocol-sp", path: "../omq/protocol-sp"
+gem "protocol-sp", path: ENV["NNQ_DEV"] ? "../protocol-sp" : nil

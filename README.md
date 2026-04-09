@@ -1,5 +1,10 @@
 # NNQ — pure Ruby NNG on Async
 
+[![CI](https://github.com/paddor/nnq/actions/workflows/ci.yml/badge.svg)](https://github.com/paddor/nnq/actions/workflows/ci.yml)
+[![Gem Version](https://img.shields.io/gem/v/nnq?color=e9573f)](https://rubygems.org/gems/nnq)
+[![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
+[![Ruby](https://img.shields.io/badge/Ruby-%3E%3D%204.0-CC342D?logo=ruby&logoColor=white)](https://www.ruby-lang.org)
+
 NNQ is a pure-Ruby implementation of nanomsg's Scalability Protocols
 (SP), wire-compatible with libnng. It is the nng-philosophy sibling of
 [omq](https://github.com/paddor/omq) (pure-Ruby ZeroMQ).
