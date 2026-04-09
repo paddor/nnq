@@ -1,14 +1,12 @@
 # frozen_string_literal: true
 
 require "protocol/sp"
-require_relative "send/staging"
 
 module NNQ
-  # Per-pipe state: a Protocol::SP::Connection plus a Send::Staging.
+  # Per-pipe state: thin wrapper around Protocol::SP::Connection.
   #
-  # Owns no fibers itself — the recv loop and reconnect logic are driven
-  # by the Engine. This class is the smallest unit shared between PUSH,
-  # PULL, PAIR, etc.
+  # Owns no fibers itself — recv loop and send pump are spawned by
+  # the Engine and routing strategy respectively.
   #
   class Connection
     # @return [Protocol::SP::Connection]
@@ -22,7 +20,6 @@ module NNQ
     def initialize(sp, endpoint: nil)
       @sp       = sp
       @endpoint = endpoint
-      @staging  = Send::Staging.new(sp)
       @closed   = false
     end
 
@@ -31,13 +28,21 @@ module NNQ
     def peer_protocol = @sp.peer_protocol
 
 
-    # Stages +body+ for delivery and blocks until on-wire (or rejected).
+    # Writes one message into the SP connection's send buffer (no flush).
     #
     # @param body [String]
     # @return [void]
-    def send_message(body)
+    def write_message(body)
       raise ClosedError, "connection closed" if @closed
-      @staging.commit(body)
+      @sp.write_message(body)
+    end
+
+
+    # Flushes the SP connection's send buffer to the socket.
+    #
+    # @return [void]
+    def flush
+      @sp.flush
     end
 
 

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "async"
+require "async/clock"
 require "protocol/sp"
 require_relative "connection"
 require_relative "reactor"
@@ -105,34 +106,60 @@ module NNQ
     end
 
 
-    # Sends +body+ via the routing strategy.
-    def send_message(body)
-      @routing.send(body)
+    # @return [Routing strategy]
+    attr_reader :routing
+
+
+    # Spawns a task under the engine's parent task. Used by routing
+    # strategies (e.g. PUSH send pump) to attach long-lived fibers to
+    # the engine's lifecycle without going through transient: true.
+    #
+    # @param annotation [String]
+    # @yield pump body
+    # @return [Async::Task]
+    def spawn_task(annotation:, &block)
+      @parent_task.async(annotation: annotation, &block)
     end
 
 
-    # Receives one message body via the routing strategy.
-    def receive_message
-      @routing.receive
-    end
-
-
-    # Closes the engine: stops listeners, closes connections, signals
-    # any waiters.
+    # Closes the engine: stops listeners, drains the send queue subject
+    # to linger, then closes connections and stops routing pumps.
     def close
       return if @closed
-      @closed = true
       @listeners.each(&:stop)
+      drain_send_queue(@options.linger)
+      @closed = true
       @connections.each(&:close)
       @routing.close if @routing.respond_to?(:close)
       @new_pipe.signal
     end
 
 
+    # Called by routing pumps (or the recv loop) when their connection
+    # has died. Idempotent.
+    def handle_connection_lost(conn)
+      return unless @connections.delete(conn)
+      @routing.connection_removed(conn) if @routing.respond_to?(:connection_removed)
+      conn.close
+    end
+
+
     private
+
+    def drain_send_queue(timeout)
+      return unless @routing.respond_to?(:send_queue_drained?)
+      return if @connections.empty?
+      deadline = timeout ? Async::Clock.now + timeout : nil
+      until @routing.send_queue_drained?
+        break if deadline && (deadline - Async::Clock.now) <= 0
+        sleep 0.001
+      end
+    end
+
 
     def register(conn)
       @connections << conn
+      @routing.connection_added(conn) if @routing.respond_to?(:connection_added)
       spawn_recv_loop(conn) if @routing.respond_to?(:enqueue)
       @new_pipe.signal
     end
@@ -147,8 +174,7 @@ module NNQ
           break
         end
       ensure
-        conn.close
-        @connections.delete(conn)
+        handle_connection_lost(conn)
       end
     end
 

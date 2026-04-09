@@ -5,12 +5,13 @@ require_relative "routing/push"
 require_relative "routing/pull"
 
 module NNQ
-  # PUSH side of the pipeline pattern (nng push0). Round-robins messages
-  # across all live PULL peers. Defaults to dialing.
+  # PUSH side of the pipeline pattern (nng push0). Enqueues onto a single
+  # bounded send queue (`send_hwm`); per-peer send pumps work-steal from
+  # it. Defaults to dialing.
   #
   class PUSH < Socket
     def send(body)
-      Reactor.run { @engine.send_message(body) }
+      Reactor.run { @engine.routing.send(body) }
     end
 
 
@@ -22,7 +23,7 @@ module NNQ
 
 
     def build_routing(engine)
-      Routing::Push.new(engine.connections, engine.new_pipe)
+      Routing::Push.new(engine)
     end
   end
 
@@ -33,7 +34,7 @@ module NNQ
   #
   class PULL < Socket
     def receive
-      Reactor.run { @engine.receive_message }
+      Reactor.run { @engine.routing.receive }
     end
 
 

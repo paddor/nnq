@@ -27,8 +27,8 @@ module NNQ
     end
 
 
-    def initialize(linger: 0)
-      @options = Options.new(linger: linger)
+    def initialize(linger: nil, send_hwm: Options::DEFAULT_HWM)
+      @options = Options.new(linger: linger, send_hwm: send_hwm)
       @engine  = Engine.new(protocol: protocol, options: @options) { |engine| build_routing(engine) }
     end
 
