@@ -1,8 +1,9 @@
-$LOAD_PATH.unshift("lib", "test")
-require "test_helper"
+# frozen_string_literal: true
+
+require_relative "../test_helper"
 
 describe NNQ::PUB do
-  it "works" do
+  it "delivers to a subscribed peer" do
     Sync do
       pub = NNQ::PUB.bind("tcp://127.0.0.1:0")
       sub = NNQ::SUB.connect(pub.last_endpoint)
@@ -22,7 +23,7 @@ describe NNQ::PUB do
   end
 
 
-  it "works again" do
+  it "delivers to a second fresh pair" do
     Sync do
       pub = NNQ::PUB.bind("tcp://127.0.0.1:0")
       sub = NNQ::SUB.connect(pub.last_endpoint)
