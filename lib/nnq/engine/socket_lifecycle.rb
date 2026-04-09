@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "async/promise"
+
 module NNQ
   class Engine
     # Owns the socket-level state: `:new → :open → :closing → :closed`
@@ -31,11 +33,16 @@ module NNQ
       # @return [Boolean] true if parent_task is the shared Reactor thread
       attr_reader :on_io_thread
 
+      # @return [Async::Promise] resolves with the first connected peer
+      #   (or nil if the socket closes before anyone connects)
+      attr_reader :peer_connected
+
 
       def initialize
-        @state        = :new
-        @parent_task  = nil
-        @on_io_thread = false
+        @state          = :new
+        @parent_task    = nil
+        @on_io_thread   = false
+        @peer_connected = Async::Promise.new
       end
 
 

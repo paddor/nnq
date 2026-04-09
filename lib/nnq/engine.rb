@@ -75,6 +75,10 @@ module NNQ
     def closed? = @lifecycle.closed?
 
 
+    # @return [Async::Promise] resolves with the first connected peer
+    def peer_connected = @lifecycle.peer_connected
+
+
     # Stores the parent Async task that long-lived NNQ fibers will
     # attach to. The caller (Socket) is responsible for picking the
     # right one (the user's current task, or Reactor.root_task).
@@ -153,6 +157,9 @@ module NNQ
       @connections.values.each(&:close!)
       @lifecycle.finish_closing!
       @new_pipe.signal
+      # Unblock anyone waiting on peer_connected when the socket is
+      # closed before a peer ever arrived.
+      @lifecycle.peer_connected.resolve(nil) unless @lifecycle.peer_connected.resolved?
     end
 
 

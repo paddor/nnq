@@ -105,6 +105,7 @@ module NNQ
           tear_down!
           raise
         end
+        @engine.lifecycle.peer_connected.resolve(conn) unless @engine.lifecycle.peer_connected.resolved?
         @engine.new_pipe.signal
       end
 

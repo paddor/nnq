@@ -57,6 +57,11 @@ module NNQ
     def connection_count = @engine.connections.size
 
 
+    # Resolves with the first connected peer (or nil on close without
+    # any peers). Block on `.wait` to wait until a connection is ready.
+    def peer_connected = @engine.peer_connected
+
+
     private
 
     def ensure_parent_task
