@@ -73,7 +73,8 @@ module NNQ
       private
 
       def spawn_pump(conn, queue)
-        @engine.spawn_task(annotation: "nnq pub pump #{conn.endpoint}") do
+        conn_barrier = @engine.connections[conn]&.barrier
+        @engine.spawn_task(annotation: "nnq pub pump #{conn.endpoint}", barrier: conn_barrier || @engine.barrier) do
           loop do
             body = queue.dequeue
             conn.send_message(body)
@@ -81,8 +82,6 @@ module NNQ
           rescue EOFError, IOError, Errno::EPIPE, Errno::ECONNRESET
             break
           end
-        ensure
-          @engine.handle_connection_lost(conn)
         end
       end
     end

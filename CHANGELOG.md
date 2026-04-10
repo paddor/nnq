@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+- **Barrier-based cascading teardown** — `SocketLifecycle` owns a
+  socket-level `Async::Barrier`; `ConnectionLifecycle` creates a nested
+  per-connection barrier. All pumps, accept loops, reconnect loops, and
+  supervisors live under these barriers. `Engine#close` calls
+  `barrier.stop` once and every descendant unwinds atomically. Replaces
+  the manual `@tasks` array.
+- **Per-connection supervisor** — each connection spawns a supervisor
+  task (on the socket barrier) that watches for the first pump exit and
+  runs `lost!` in `ensure`. Placing the supervisor outside the
+  per-connection barrier avoids the self-stop footgun.
+- **Connect timeout** — `Transport::TCP.connect` uses
+  `Socket.tcp(host, port, connect_timeout:)` instead of `TCPSocket.new`.
+  Timeout derived from `reconnect_interval` (floor 0.5s). Fixes macOS
+  hang where IPv6 `connect(2)` never delivers `ECONNREFUSED`.
+- **Handshake timeout** — SP greeting exchange wrapped in
+  `Async::Task#with_timeout(handshake_timeout)`. Prevents a hang when a
+  non-NNG service accepts the TCP connection but never sends a greeting.
+- **Reconnect after handshake failure** — `ConnectionLifecycle#handshake!`
+  now calls `tear_down!(reconnect: true)` on error instead of bare
+  `transition!(:closed)`, so the endpoint doesn't go dead when a peer
+  RSTs mid-handshake.
+- **Quantized reconnect sleeps** — `Reconnect#quantized_wait` aligns
+  retries to wall-clock grid boundaries. Multiple clients reconnecting
+  with the same interval wake at the same instant.
+- **Send pump fairness yield** — `Async::Task.current.yield` after each
+  batch write ensures peer pumps get a turn when the queue stays
+  non-empty.
+- Add `DESIGN.md` documenting the architecture.
+
 ## 0.4.0 — 2026-04-09
 
 - `Socket#all_peers_gone` — `Async::Promise` resolving the first time

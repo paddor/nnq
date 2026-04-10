@@ -35,8 +35,19 @@ module NNQ
         # @return [void]
         def connect(endpoint, engine)
           host, port = parse_endpoint(endpoint)
-          sock = TCPSocket.new(host, port)
+          sock = ::Socket.tcp(host, port, connect_timeout: connect_timeout(engine.options))
           engine.handle_connected(IO::Stream::Buffered.wrap(sock), endpoint: endpoint)
+        end
+
+
+        # Connect timeout: cap each attempt at the reconnect interval so
+        # a hung connect(2) (e.g. macOS kqueue + IPv6 ECONNREFUSED not
+        # delivered) doesn't block the retry loop. Floor at 0.5s for
+        # real-network latency.
+        def connect_timeout(options)
+          ri = options.reconnect_interval
+          ri = ri.end if ri.is_a?(Range)
+          [ri, 0.5].max
         end
 
 

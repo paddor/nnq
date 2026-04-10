@@ -55,10 +55,6 @@ module NNQ
     #   is lost.
     attr_reader :dialed
 
-    # @return [Array<Async::Task>] transient tasks owned by the engine
-    #   (currently just background reconnect loops). Stopped at #close.
-    attr_reader :tasks
-
 
     # @return [Async::Queue, nil] monitor event queue (set by Socket#monitor)
     attr_accessor :monitor_queue
@@ -80,7 +76,6 @@ module NNQ
       @monitor_queue   = nil
       @verbose_monitor = false
       @dialed          = Set.new
-      @tasks           = []
       @routing         = yield(self)
     end
 
@@ -107,6 +102,9 @@ module NNQ
 
     # @return [Async::Task, nil]
     def parent_task = @lifecycle.parent_task
+
+    # @return [Async::Barrier, nil]
+    def barrier = @lifecycle.barrier
 
 
     def closed? = @lifecycle.closed?
@@ -159,7 +157,7 @@ module NNQ
     def bind(endpoint)
       transport = transport_for(endpoint)
       listener  = transport.bind(endpoint, self)
-      listener.start_accept_loop(@lifecycle.parent_task) do |io, framing = :tcp|
+      listener.start_accept_loop(@lifecycle.barrier) do |io, framing = :tcp|
         handle_accepted(io, endpoint: endpoint, framing: framing)
       end
       @listeners << listener
@@ -179,7 +177,7 @@ module NNQ
         transport_for(endpoint).connect(endpoint, self)
       else
         emit_monitor_event(:connect_delayed, endpoint: endpoint)
-        Reconnect.schedule(endpoint, @options, @lifecycle.parent_task, self, delay: 0)
+        Reconnect.schedule(endpoint, @options, @lifecycle.barrier, self, delay: 0)
       end
     end
 
@@ -191,7 +189,7 @@ module NNQ
       return unless endpoint && @dialed.include?(endpoint)
       return unless @lifecycle.alive? && @lifecycle.reconnect_enabled
       return if endpoint.start_with?("inproc://")
-      Reconnect.schedule(endpoint, @options, @lifecycle.parent_task, self)
+      Reconnect.schedule(endpoint, @options, @lifecycle.barrier, self)
     end
 
 
@@ -208,6 +206,7 @@ module NNQ
       lifecycle = ConnectionLifecycle.new(self, endpoint: endpoint, framing: framing)
       lifecycle.handshake!(io)
       spawn_recv_loop(lifecycle.conn) if @routing.respond_to?(:enqueue) && @connections.key?(lifecycle.conn)
+      lifecycle.start_supervisor!
     rescue ConnectionRejected
       # routing rejected this peer (e.g. PAIR already bonded) — lifecycle cleaned up
     rescue => e
@@ -220,16 +219,18 @@ module NNQ
       lifecycle = ConnectionLifecycle.new(self, endpoint: endpoint, framing: framing)
       lifecycle.handshake!(io)
       spawn_recv_loop(lifecycle.conn) if @routing.respond_to?(:enqueue) && @connections.key?(lifecycle.conn)
+      lifecycle.start_supervisor!
     rescue ConnectionRejected
       # unusual on connect side, but handled identically
     end
 
 
-    # Spawns a task under the socket's parent task. Used by routing
+    # Spawns a task under the socket's barrier. Used by routing
     # strategies (e.g. PUSH send pump) to attach long-lived fibers to
-    # the engine's lifecycle without going through transient: true.
-    def spawn_task(annotation:, &block)
-      @lifecycle.parent_task.async(annotation: annotation, &block)
+    # the engine's lifecycle. The barrier tracks all spawned tasks so
+    # teardown is a single barrier.stop call.
+    def spawn_task(annotation:, barrier: @lifecycle.barrier, &block)
+      barrier.async(annotation: annotation, &block)
     end
 
 
@@ -242,13 +243,14 @@ module NNQ
       return unless @lifecycle.alive?
       @lifecycle.start_closing!
       @listeners.each(&:stop)
-      @tasks.each { |t| t.stop rescue nil }
-      @tasks.clear
       drain_send_queue(@options.linger)
       @routing.close if @routing.respond_to?(:close)
       # Tear down each remaining connection via its lifecycle. The
       # collection mutates during iteration, so snapshot the values.
       @connections.values.each(&:close!)
+      # Cascade-cancel every remaining task (reconnect loops, accept
+      # loops, supervisors) in one shot.
+      @lifecycle.barrier&.stop
       @lifecycle.finish_closing!
       @new_pipe.signal
       # Unblock anyone waiting on peer_connected when the socket is
@@ -286,7 +288,7 @@ module NNQ
 
 
     def spawn_recv_loop(conn)
-      @lifecycle.parent_task.async(annotation: "nnq recv #{conn.endpoint}") do
+      @connections[conn].barrier.async(annotation: "nnq recv #{conn.endpoint}") do
         loop do
           body = conn.receive_message
           emit_verbose_monitor_event(:message_received, body: body)
@@ -294,8 +296,6 @@ module NNQ
         rescue *CONNECTION_LOST, Async::Stop
           break
         end
-      ensure
-        handle_connection_lost(conn)
       end
     end
   end

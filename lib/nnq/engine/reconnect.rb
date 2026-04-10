@@ -55,10 +55,10 @@ module NNQ
       def run(parent_task, delay: nil)
         delay, max_delay = init_delay(delay)
 
-        task = parent_task.async(transient: true, annotation: "nnq reconnect #{@endpoint}") do
+        parent_task.async(transient: true, annotation: "nnq reconnect #{@endpoint}") do
           loop do
             break if @engine.closed?
-            sleep delay if delay > 0
+            sleep quantized_wait(delay) if delay > 0
             break if @engine.closed?
             begin
               @engine.transport_for(@endpoint).connect(@endpoint, @engine)
@@ -70,11 +70,20 @@ module NNQ
           end
         rescue Async::Stop
         end
-        @engine.tasks << task
       end
 
 
       private
+
+
+      # Wall-clock quantized sleep: wait until the next +delay+-sized
+      # grid tick. Multiple clients reconnecting with the same interval
+      # wake up at the same instant, collapsing staggered retries into
+      # aligned waves.
+      def quantized_wait(delay, now = Time.now.to_f)
+        wait = delay - (now % delay)
+        wait.positive? ? wait : delay
+      end
 
 
       def init_delay(delay)

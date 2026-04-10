@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "async/barrier"
 require "protocol/sp"
 require_relative "../connection"
 
@@ -42,6 +43,12 @@ module NNQ
       # @return [Symbol]
       attr_reader :state
 
+      # @return [Async::Barrier] holds all per-connection pump tasks
+      #   (send pump, recv pump). When the connection is torn down,
+      #   {#tear_down!} calls `@barrier.stop` to cancel every sibling
+      #   task atomically.
+      attr_reader :barrier
+
 
       # @param engine [Engine]
       # @param endpoint [String, nil]
@@ -52,6 +59,7 @@ module NNQ
         @framing  = framing
         @state    = :new
         @conn     = nil
+        @barrier  = Async::Barrier.new(parent: engine.barrier)
       end
 
 
@@ -68,13 +76,15 @@ module NNQ
           max_message_size: @engine.options.max_message_size,
           framing:          @framing,
         )
-        sp.handshake!
+        Async::Task.current.with_timeout(handshake_timeout) { sp.handshake! }
         ready!(NNQ::Connection.new(sp, endpoint: @endpoint))
         @conn
-      rescue => e
-        @engine.emit_monitor_event(:handshake_failed, endpoint: @endpoint, detail: { error: e })
+      rescue Protocol::SP::Error, *CONNECTION_LOST, Async::TimeoutError => error
+        @engine.emit_monitor_event(:handshake_failed, endpoint: @endpoint, detail: { error: error })
         io.close rescue nil
-        transition!(:closed) unless @state == :closed
+        # Full tear-down with reconnect: without this, the endpoint
+        # goes dead when a peer RSTs mid-handshake.
+        tear_down!(reconnect: true)
         raise
       end
 
@@ -83,16 +93,28 @@ module NNQ
       # asks the engine to schedule a reconnect (if the endpoint is in
       # the dialed set and reconnect is still enabled).
       def lost!
-        ep = @endpoint
-        tear_down!
-        @engine.maybe_reconnect(ep)
+        tear_down!(reconnect: true)
       end
 
 
       # Deliberate close (engine shutdown or routing eviction). Does
       # not trigger reconnect.
       def close!
-        tear_down!
+        tear_down!(reconnect: false)
+      end
+
+
+      # Starts a supervisor for this connection. Must be called after
+      # all per-connection pumps (recv loop, send pump) have been
+      # spawned on the connection barrier. The supervisor blocks until
+      # the first pump exits, then runs tear_down! via lost!.
+      #
+      # Called by Engine#handle_accepted / Engine#handle_connected after
+      # spawning the recv loop — routing's connection_added may have
+      # already spawned send pumps during ready!, so the barrier is
+      # guaranteed non-empty by then.
+      def start_supervisor!
+        start_supervisor unless @barrier.empty?
       end
 
 
@@ -106,7 +128,7 @@ module NNQ
           @engine.routing.connection_added(conn) if @engine.routing.respond_to?(:connection_added)
         rescue ConnectionRejected
           @engine.emit_monitor_event(:connection_rejected, endpoint: @endpoint)
-          tear_down!
+          tear_down!(reconnect: false)
           raise
         end
         @engine.lifecycle.peer_connected.resolve(conn) unless @engine.lifecycle.peer_connected.resolved?
@@ -116,7 +138,7 @@ module NNQ
       end
 
 
-      def tear_down!
+      def tear_down!(reconnect: false)
         return if @state == :closed
         transition!(:closed)
         if @conn
@@ -126,6 +148,35 @@ module NNQ
           @engine.emit_monitor_event(:disconnected, endpoint: @endpoint)
           @engine.resolve_all_peers_gone_if_empty
         end
+        @engine.maybe_reconnect(@endpoint) if reconnect
+        # Cancel every sibling pump of this connection. The caller is
+        # the supervisor task, which is NOT in the barrier — so there
+        # is no self-stop risk.
+        @barrier.stop
+      end
+
+
+      # Spawns a supervisor task on the *socket-level* barrier (not the
+      # per-connection barrier) that blocks on the first pump to finish
+      # and then triggers teardown.
+      def start_supervisor
+        @engine.barrier.async(transient: true, annotation: "conn supervisor") do
+          @barrier.wait { |task| task.wait; break }
+        rescue Async::Stop, Async::Cancel
+        rescue *CONNECTION_LOST
+        ensure
+          lost!
+        end
+      end
+
+
+      # Handshake timeout: same logic as TCP.connect_timeout — derived
+      # from reconnect_interval (floor 0.5s). Prevents a hang when the
+      # peer accepts the TCP connection but never sends an SP greeting.
+      def handshake_timeout
+        ri = @engine.options.reconnect_interval
+        ri = ri.end if ri.is_a?(Range)
+        [ri, 0.5].max
       end
 
 

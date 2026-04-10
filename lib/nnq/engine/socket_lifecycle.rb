@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "async/barrier"
 require "async/promise"
 
 module NNQ
@@ -42,9 +43,14 @@ module NNQ
       #   Edge-triggered: does not re-arm on reconnect.
       attr_reader :all_peers_gone
 
+      # @return [Async::Barrier, nil] holds every socket-scoped task
+      #   (connection supervisors, reconnect loops, accept loops).
+      #   {Engine#close} calls +barrier.stop+ to cascade teardown
+      #   through every per-connection barrier in one shot.
+      attr_reader :barrier
+
       # @return [Boolean] when false, the engine must not schedule new
-      #   reconnect attempts. Default true. nnq has no automatic
-      #   reconnect loop yet, so this currently just records intent.
+      #   reconnect attempts. Default true.
       attr_accessor :reconnect_enabled
 
 
@@ -55,6 +61,7 @@ module NNQ
         @peer_connected    = Async::Promise.new
         @all_peers_gone    = Async::Promise.new
         @reconnect_enabled = true
+        @barrier           = nil
       end
 
 
@@ -75,6 +82,7 @@ module NNQ
         return false if @parent_task
         @parent_task  = task
         @on_io_thread = on_io_thread
+        @barrier      = Async::Barrier.new(parent: @parent_task)
         transition!(:open)
         true
       end

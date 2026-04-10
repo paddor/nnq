@@ -79,7 +79,8 @@ module NNQ
       #
       # @param conn [Connection]
       def spawn_send_pump_for(conn)
-        task = @engine.spawn_task(annotation: "nnq send pump #{conn.endpoint}") do
+        conn_barrier = @engine.connections[conn]&.barrier
+        task = @engine.spawn_task(annotation: "nnq send pump #{conn.endpoint}", barrier: conn_barrier || @engine.barrier) do
           loop do
             first = @send_queue.dequeue
             break if first.nil? # queue closed
@@ -91,12 +92,11 @@ module NNQ
             ensure
               @in_flight -= 1
             end
+            Async::Task.current.yield
           rescue EOFError, IOError, Errno::EPIPE, Errno::ECONNRESET
             # Peer died mid-flush. In-flight batch dropped.
             break
           end
-        ensure
-          @engine.handle_connection_lost(conn)
         end
         @pumps[conn] = task
       end
