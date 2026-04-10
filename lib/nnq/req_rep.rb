@@ -9,7 +9,7 @@ module NNQ
   # request per socket. #send_request blocks until the matching reply
   # comes back.
   #
-  class REQ < Socket
+  class REQ0 < Socket
     # Sends +body+ as a request, blocks until the matching reply
     # arrives. Returns the reply body (without the id header).
     def send_request(body)
@@ -33,7 +33,7 @@ module NNQ
   # REP (nng rep0): server side of request/reply. Strict alternation
   # of #receive then #send_reply, per request.
   #
-  class REP < Socket
+  class REP0 < Socket
     # Blocks until the next request arrives. Returns the request body.
     def receive
       Reactor.run { @engine.routing.receive }
@@ -57,4 +57,7 @@ module NNQ
       Routing::Rep.new(engine)
     end
   end
+
+  REQ = REQ0
+  REP = REP0
 end

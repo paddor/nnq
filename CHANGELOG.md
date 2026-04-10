@@ -30,6 +30,19 @@
   batch write ensures peer pumps get a turn when the queue stays
   non-empty.
 - Add `DESIGN.md` documenting the architecture.
+- **Versioned socket names** — `PUSH` → `PUSH0`, `PULL` → `PULL0`, etc.
+  Canonical names now include the SP protocol version. Unversioned
+  aliases (`NNQ::PUSH = NNQ::PUSH0`) are kept for backward compat.
+- **`raw:` kwarg** — `Socket#initialize` accepts `raw: false`. Plumbing
+  for raw-mode routing (device/proxy support). No functional raw
+  routing yet.
+- **`NNQ::BUS0`** — best-effort bidirectional mesh (bus0). Fan-out send
+  to all peers (drop when full), shared recv queue. Self-pairing.
+- **`NNQ::SURVEYOR0` / `NNQ::RESPONDENT0`** — survey/response pattern
+  (survey0). Surveyor broadcasts a survey with a timed reply window
+  (`options.survey_time`, default 1s). Respondent echoes the backtrace
+  like REP. Shared `Routing::Backtrace` module extracted from REP.
+- **`NNQ::TimedOut`** error raised when the survey window expires.
 
 ## 0.4.0 — 2026-04-09
 

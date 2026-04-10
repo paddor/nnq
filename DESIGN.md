@@ -253,9 +253,13 @@ batch flushing.
 | PUB/SUB | fan-out (local prefix filter) | subscribe filter | publish/subscribe |
 | REQ/REP | round-robin + request ID | request-ID-based reply | request/reply |
 | PAIR | exclusive 1:1 | exclusive 1:1 | bidirectional |
+| SURVEYOR/RESPONDENT | fan-out + timed reply window | backtrace echo | survey/vote |
+| BUS | fan-out to all peers (best-effort) | shared recv queue | mesh |
 
 All socket types use nng's version-0 protocols (`push0`, `pull0`, etc.)
-and are wire-compatible with libnng peers.
+and are wire-compatible with libnng peers. Class names include the
+protocol version: `NNQ::PUSH0`, `NNQ::BUS0`, etc. Unversioned aliases
+(`NNQ::PUSH = NNQ::PUSH0`) exist for the original seven types.
 
 ## Dependencies
 

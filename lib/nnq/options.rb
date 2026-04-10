@@ -18,6 +18,7 @@ module NNQ
     attr_accessor :reconnect_interval
     attr_accessor :max_message_size
     attr_accessor :send_hwm
+    attr_accessor :survey_time
 
     def initialize(linger: nil, send_hwm: DEFAULT_HWM)
       @linger             = linger
@@ -26,6 +27,7 @@ module NNQ
       @reconnect_interval = 0.1
       @max_message_size   = nil
       @send_hwm           = send_hwm
+      @survey_time        = 1.0
     end
   end
 end

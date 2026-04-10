@@ -10,7 +10,7 @@ module NNQ
   # a slow peer drops messages instead of blocking fast peers.
   # Defaults to listening.
   #
-  class PUB < Socket
+  class PUB0 < Socket
     def send(body)
       Reactor.run { @engine.routing.send(body) }
     end
@@ -34,7 +34,7 @@ module NNQ
   # are delivered — matching nng (unlike pre-4.x ZeroMQ). Defaults
   # to dialing.
   #
-  class SUB < Socket
+  class SUB0 < Socket
     # Subscribes to +prefix+. Bytes-level match. The empty string
     # matches everything.
     #
@@ -69,4 +69,7 @@ module NNQ
       Routing::Sub.new
     end
   end
+
+  PUB = PUB0
+  SUB = SUB0
 end

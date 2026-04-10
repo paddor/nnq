@@ -7,4 +7,5 @@ module NNQ
   class TimeoutError    < Error; end
   class RequestCancelled < Error; end
   class ConnectionRejected < Error; end
+  class TimedOut < Error; end
 end

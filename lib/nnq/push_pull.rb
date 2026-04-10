@@ -9,7 +9,7 @@ module NNQ
   # bounded send queue (`send_hwm`); per-peer send pumps work-steal from
   # it. Defaults to dialing.
   #
-  class PUSH < Socket
+  class PUSH0 < Socket
     def send(body)
       Reactor.run { @engine.routing.send(body) }
     end
@@ -32,7 +32,7 @@ module NNQ
   # from all live PUSH peers into one unbounded receive queue. Defaults
   # to listening.
   #
-  class PULL < Socket
+  class PULL0 < Socket
     def receive
       Reactor.run do
         if (timeout = @engine.options.read_timeout)
@@ -55,4 +55,7 @@ module NNQ
       Routing::Pull.new
     end
   end
+
+  PUSH = PUSH0
+  PULL = PULL0
 end

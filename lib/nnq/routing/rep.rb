@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "async/queue"
+require_relative "backtrace"
 
 module NNQ
   module Routing
@@ -27,7 +28,7 @@ module NNQ
     # - TTL cap on the backtrace stack: 8 hops, matching nng's default.
     #
     class Rep
-      MAX_HOPS = 8 # nng's default ttl
+      include Backtrace
 
       def initialize(engine)
         @engine     = engine
@@ -94,25 +95,6 @@ module NNQ
       end
 
 
-      private
-
-      # Reads 4-byte BE words off the front of +body+, stopping at the
-      # first one whose top byte has its high bit set. Returns
-      # [backtrace_bytes, remaining_payload] or nil on malformed input.
-      def parse_backtrace(body)
-        offset = 0
-        hops   = 0
-        while hops < MAX_HOPS
-          return nil if body.bytesize - offset < 4
-          word = body.byteslice(offset, 4)
-          offset += 4
-          hops   += 1
-          if word.getbyte(0) & 0x80 != 0
-            return [body.byteslice(0, offset), body.byteslice(offset..)]
-          end
-        end
-        nil # exceeded TTL without finding terminator
-      end
     end
   end
 end

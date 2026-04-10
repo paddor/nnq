@@ -8,7 +8,7 @@ module NNQ
   # peer. First peer to connect wins; subsequent peers are dropped
   # until the current one disconnects. No SP header on the wire.
   #
-  class PAIR < Socket
+  class PAIR0 < Socket
     def send(body)
       Reactor.run { @engine.routing.send(body) }
     end
@@ -30,4 +30,6 @@ module NNQ
       Routing::Pair.new(engine)
     end
   end
+
+  PAIR = PAIR0
 end

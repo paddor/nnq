@@ -30,10 +30,14 @@ module NNQ
     end
 
 
-    def initialize(linger: nil, send_hwm: Options::DEFAULT_HWM)
+    def initialize(raw: false, linger: nil, send_hwm: Options::DEFAULT_HWM)
+      @raw     = raw
       @options = Options.new(linger: linger, send_hwm: send_hwm)
       @engine  = Engine.new(protocol: protocol, options: @options) { |engine| build_routing(engine) }
     end
+
+
+    def raw? = @raw
 
 
     def bind(endpoint)
