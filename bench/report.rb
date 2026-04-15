@@ -41,13 +41,21 @@ if options[:update_readme]
   TRANSPORTS  = %w[inproc ipc tcp].freeze
   SIZE_LABELS = { 128 => "128 B", 512 => "512 B", 2048 => "2 KiB", 8192 => "8 KiB", 32_768 => "32 KiB" }.freeze
 
-  latest = rows.map { |r| r[:run_id] }.uniq.max
-  abort "No runs found in #{RESULTS_PATH}" unless latest
-  latest_rows = rows.select { |r| r[:run_id] == latest }
+  abort "No runs found in #{RESULTS_PATH}" if rows.empty?
 
-  # Look up a specific cell's row from the latest run.
+  # Latest run_id per pattern -- so a single-pattern bench run still
+  # refreshes its own table without nuking the others.
+  latest_per_pattern = rows.group_by { |r| r[:pattern] }
+                           .transform_values { |rs| rs.map { |r| r[:run_id] }.max }
+
+  # Look up a specific cell's row from that pattern's latest run.
   cell = lambda do |pattern, transport, peers, msg_size|
-    latest_rows.find { |x| x[:pattern] == pattern && x[:transport] == transport && x[:peers] == peers && x[:msg_size] == msg_size }
+    latest = latest_per_pattern[pattern]
+    next nil unless latest
+    rows.find do |x|
+      x[:run_id] == latest && x[:pattern] == pattern &&
+        x[:transport] == transport && x[:peers] == peers && x[:msg_size] == msg_size
+    end
   end
 
   fmt_rate = lambda do |v|
@@ -126,7 +134,7 @@ if options[:update_readme]
   readme = replace_block.call(readme, "push_pull", build_push_pull.call)
   readme = replace_block.call(readme, "req_rep",   build_req_rep.call)
   File.write(README_PATH, readme)
-  puts "Updated #{README_PATH} from run #{latest}"
+  puts "Updated #{README_PATH} from runs: #{latest_per_pattern.map { |k, v| "#{k}=#{v}" }.join(', ')}"
   exit 0
 end
 
