@@ -21,7 +21,11 @@ module NNQ
     # {#spawn_send_pump_for} from their #connection_added hook.
     #
     module SendPump
+      # TODO: API doc
       BATCH_MSG_CAP  = 256
+
+
+      # TODO: API doc
       BATCH_BYTE_CAP = 256 * 1024
 
 
@@ -56,6 +60,7 @@ module NNQ
 
       private
 
+
       # @param engine [Engine]
       def init_send_pump(engine)
         @engine     = engine
@@ -79,12 +84,16 @@ module NNQ
       #
       # @param conn [Connection]
       def spawn_send_pump_for(conn)
-        conn_barrier = @engine.connections[conn]&.barrier
-        task = @engine.spawn_task(annotation: "nnq send pump #{conn.endpoint}", barrier: conn_barrier || @engine.barrier) do
+        annotation = "nnq send pump #{conn.endpoint}"
+        barrier    = @engine.connections[conn]&.barrier || @engine.barrier
+
+        task = @engine.spawn_task(annotation:, barrier:) do
           loop do
             first = @send_queue.dequeue
             break if first.nil? # queue closed
+
             @in_flight += 1
+
             begin
               batch = [first]
               drain_capped(batch)
@@ -92,21 +101,26 @@ module NNQ
             ensure
               @in_flight -= 1
             end
+
             Async::Task.current.yield
           rescue EOFError, IOError, Errno::EPIPE, Errno::ECONNRESET
             # Peer died mid-flush. In-flight batch dropped.
             break
           end
         end
+
         @pumps[conn] = task
       end
 
 
       def drain_capped(batch)
-        bytes = batch[0].bytesize
+        bytes = batch.first.bytesize
+
         while batch.size < BATCH_MSG_CAP && bytes < BATCH_BYTE_CAP
           msg = @send_queue.dequeue(timeout: 0)
+
           break unless msg
+
           batch << msg
           bytes += msg.bytesize
         end
@@ -115,16 +129,21 @@ module NNQ
 
       def write_batch(conn, batch)
         if batch.size == 1
-          conn.write_message(batch[0])
+          conn.write_message(batch.first)
         else
           # Single mutex acquisition for the whole batch (batches run
           # up to BATCH_MSG_CAP messages). The per-message pump loop
           # would otherwise lock/unlock the SP mutex N times.
           conn.write_messages(batch)
         end
+
         conn.flush
-        batch.each { |body| @engine.emit_verbose_monitor_event(:message_sent, body: body) }
+
+        batch.each do |body|
+          @engine.emit_verbose_monitor_event(:message_sent, body: body)
+        end
       end
+
     end
   end
 end

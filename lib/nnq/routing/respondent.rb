@@ -14,6 +14,7 @@ module NNQ
     class Respondent
       include Backtrace
 
+
       def initialize(engine)
         @engine     = engine
         @recv_queue = Async::Queue.new
@@ -29,7 +30,9 @@ module NNQ
       def receive
         @mutex.synchronize { @pending = nil }
         item = @recv_queue.dequeue
+
         return nil if item.nil?
+
         conn, btrace, body = item
         @mutex.synchronize { @pending = [conn, btrace] }
         body
@@ -52,7 +55,7 @@ module NNQ
       end
 
 
-      # Called by the engine recv loop with each received frame.
+      # Called by the engine recv loop with each received message.
       def enqueue(body, conn)
         btrace, payload = parse_backtrace(body)
         return unless btrace # malformed/over-TTL — drop
@@ -75,6 +78,7 @@ module NNQ
       def close_read
         @recv_queue.enqueue(nil)
       end
+
     end
   end
 end

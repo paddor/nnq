@@ -17,6 +17,7 @@ module NNQ
 
     private
 
+
     def protocol
       Protocol::SP::Protocols::PUSH_V0
     end
@@ -46,6 +47,7 @@ module NNQ
 
     private
 
+
     def protocol
       Protocol::SP::Protocols::PULL_V0
     end
@@ -55,6 +57,7 @@ module NNQ
       Routing::Pull.new
     end
   end
+
 
   PUSH = PUSH0
   PULL = PULL0

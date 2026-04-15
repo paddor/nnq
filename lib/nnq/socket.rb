@@ -30,14 +30,24 @@ module NNQ
     end
 
 
-    def initialize(raw: false, linger: nil, send_hwm: Options::DEFAULT_HWM)
+    # @yieldparam [self] the socket; when a block is passed the socket
+    #   is {#close}d when the block returns (or raises), File.open-style.
+    def initialize(raw: false, linger: Float::INFINITY, send_hwm: Options::DEFAULT_HWM)
       @raw     = raw
       @options = Options.new(linger: linger, send_hwm: send_hwm)
       @engine  = Engine.new(protocol: protocol, options: @options) { |engine| build_routing(engine) }
+
+      begin
+        yield self
+      ensure
+        close
+      end if block_given?
     end
 
 
-    def raw? = @raw
+    def raw?
+      @raw
+    end
 
 
     def bind(endpoint)
@@ -58,23 +68,35 @@ module NNQ
     end
 
 
-    def last_endpoint = @engine.last_endpoint
+    def last_endpoint
+      @engine.last_endpoint
+    end
 
 
-    def connection_count = @engine.connections.size
+    def connection_count
+      @engine.connections.size
+    end
 
 
     # Resolves with the first connected peer (or nil on close without
     # any peers). Block on `.wait` to wait until a connection is ready.
-    def peer_connected = @engine.peer_connected
+    def peer_connected
+      @engine.peer_connected
+    end
 
 
     # Resolves with `true` the first time all peers have disconnected
     # (after at least one peer was connected). Edge-triggered.
-    def all_peers_gone = @engine.all_peers_gone
+    def all_peers_gone
+      @engine.all_peers_gone
+    end
 
 
-    def reconnect_enabled  = @engine.reconnect_enabled
+    def reconnect_enabled
+      @engine.reconnect_enabled
+    end
+
+
     def reconnect_enabled=(value)
       @engine.reconnect_enabled = value
     end
@@ -98,9 +120,11 @@ module NNQ
     # @return [Async::Task]
     def monitor(verbose: false, &block)
       ensure_parent_task
-      queue = Async::Queue.new
+
+      queue                   = Async::Queue.new
       @engine.monitor_queue   = queue
       @engine.verbose_monitor = verbose
+
       Reactor.run do
         @engine.spawn_task(annotation: "nnq monitor") do
           while (event = queue.dequeue)
@@ -116,6 +140,7 @@ module NNQ
 
 
     private
+
 
     def ensure_parent_task
       # Must run OUTSIDE Reactor.run so that non-Async callers capture
@@ -140,5 +165,6 @@ module NNQ
     def build_routing(_engine)
       raise NotImplementedError
     end
+
   end
 end

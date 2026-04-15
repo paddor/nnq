@@ -11,6 +11,8 @@ module NNQ
   #   @return [Hash, nil] extra context
   #
   MonitorEvent = Data.define(:type, :endpoint, :detail) do
-    def initialize(type:, endpoint: nil, detail: nil) = super
+    def initialize(type:, endpoint: nil, detail: nil)
+      super
+    end
   end
 end

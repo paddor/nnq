@@ -10,7 +10,7 @@ module NNQ
     # Wire format: each message body on the wire is `[4-byte BE
     # request_id][user_payload]`. The request id has the high bit set
     # (`0x80000000..0xFFFFFFFF`) — that's nng's marker for "this is the
-    # last (deepest) frame on the backtrace stack". Direct REQ→REP has
+    # last (deepest) word on the backtrace stack". Direct REQ→REP has
     # exactly one id.
     #
     # Semantics (cooked mode, what this implements):
@@ -66,7 +66,7 @@ module NNQ
       end
 
 
-      # Called by the engine recv loop with each received frame.
+      # Called by the engine recv loop with each received message.
       def enqueue(body, _conn)
         return if body.bytesize < 4
         id      = body.unpack1("N")
@@ -91,17 +91,21 @@ module NNQ
 
       private
 
+
       def pick_peer
         loop do
           conns = @engine.connections.keys
+
           if conns.empty?
             @engine.new_pipe.wait
             next
           end
+
           @next_idx = (@next_idx + 1) % conns.size
           return conns[@next_idx]
         end
       end
+
     end
   end
 end

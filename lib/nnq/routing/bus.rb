@@ -38,7 +38,7 @@ module NNQ
       end
 
 
-      # Called by the engine recv loop with each received frame.
+      # Called by the engine recv loop with each received message.
       def enqueue(body, _conn = nil)
         @recv_queue.enqueue(body)
       end
@@ -87,9 +87,12 @@ module NNQ
 
       private
 
+
       def spawn_pump(conn, queue)
-        conn_barrier = @engine.connections[conn]&.barrier
-        @engine.spawn_task(annotation: "nnq bus pump #{conn.endpoint}", barrier: conn_barrier || @engine.barrier) do
+        annotation = "nnq bus pump #{conn.endpoint}"
+        barrier    = @engine.connections[conn]&.barrier || @engine.barrier
+
+        @engine.spawn_task(annotation:, barrier:) do
           loop do
             body = queue.dequeue
             conn.send_message(body)
@@ -99,6 +102,7 @@ module NNQ
           end
         end
       end
+
     end
   end
 end

@@ -21,6 +21,7 @@ module NNQ
 
     private
 
+
     def protocol
       Protocol::SP::Protocols::PAIR_V0
     end
@@ -30,6 +31,7 @@ module NNQ
       Routing::Pair.new(engine)
     end
   end
+
 
   PAIR = PAIR0
 end

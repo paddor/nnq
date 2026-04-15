@@ -70,11 +70,15 @@ module NNQ
         @queues.clear
       end
 
+
       private
 
+
       def spawn_pump(conn, queue)
-        conn_barrier = @engine.connections[conn]&.barrier
-        @engine.spawn_task(annotation: "nnq pub pump #{conn.endpoint}", barrier: conn_barrier || @engine.barrier) do
+        annotation = "nnq pub pump #{conn.endpoint}"
+        barrier    = @engine.connections[conn]&.barrier || @engine.barrier
+
+        @engine.spawn_task(annotation:, barrier:) do
           loop do
             body = queue.dequeue
             conn.send_message(body)
@@ -84,6 +88,7 @@ module NNQ
           end
         end
       end
+
     end
   end
 end

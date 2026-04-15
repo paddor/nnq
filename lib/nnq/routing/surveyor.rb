@@ -37,10 +37,17 @@ module NNQ
       # @param body [String]
       def send_survey(body)
         id = SecureRandom.random_number(0x80000000) | 0x80000000
-        @mutex.synchronize { @current_id = id }
+
+        @mutex.synchronize do
+          @current_id = id
+        end
+
         header = [id].pack("N")
         wire   = header + body
-        @queues.each_value { |q| q.enqueue(wire) unless q.limited? }
+
+        @queues.each_value do |q|
+          q.enqueue(wire) unless q.limited?
+        end
       end
 
 
@@ -56,18 +63,23 @@ module NNQ
       end
 
 
-      # Called by the engine recv loop with each received frame.
+      # Called by the engine recv loop with each received message.
       def enqueue(body, _conn)
         return if body.bytesize < 4
+
         id      = body.unpack1("N")
         payload = body.byteslice(4..)
-        @mutex.synchronize { return unless @current_id == id }
+
+        @mutex.synchronize do
+          return unless @current_id == id
+        end
+
         @recv_queue.enqueue(payload)
       end
 
 
       def connection_added(conn)
-        queue = Async::LimitedQueue.new(@engine.options.send_hwm)
+        queue             = Async::LimitedQueue.new(@engine.options.send_hwm)
         @queues[conn]     = queue
         @pump_tasks[conn] = spawn_pump(conn, queue)
       end
@@ -76,8 +88,10 @@ module NNQ
       def connection_removed(conn)
         @queues.delete(conn)
         task = @pump_tasks.delete(conn)
+
         return unless task
         return if task == Async::Task.current
+
         task.stop
       rescue IOError, Errno::EPIPE
       end
@@ -103,9 +117,12 @@ module NNQ
 
       private
 
+
       def spawn_pump(conn, queue)
-        conn_barrier = @engine.connections[conn]&.barrier
-        @engine.spawn_task(annotation: "nnq surveyor pump #{conn.endpoint}", barrier: conn_barrier || @engine.barrier) do
+        annotation = "nnq surveyor pump #{conn.endpoint}"
+        barrier    = @engine.connections[conn]&.barrier || @engine.barrier
+
+        @engine.spawn_task(annotation:, barrier:) do
           loop do
             body = queue.dequeue
             conn.send_message(body)
@@ -115,6 +132,7 @@ module NNQ
           end
         end
       end
+
     end
   end
 end

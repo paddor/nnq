@@ -18,6 +18,7 @@ module NNQ
 
     private
 
+
     def protocol
       Protocol::SP::Protocols::PUB_V0
     end
@@ -60,6 +61,7 @@ module NNQ
 
     private
 
+
     def protocol
       Protocol::SP::Protocols::SUB_V0
     end
@@ -69,6 +71,7 @@ module NNQ
       Routing::Sub.new
     end
   end
+
 
   PUB = PUB0
   SUB = SUB0

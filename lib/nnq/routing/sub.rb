@@ -53,11 +53,15 @@ module NNQ
         @queue.enqueue(nil)
       end
 
+
       private
 
+
       def matches?(body)
+        # OPTIMIZE: use Patricia-trie
         @subscriptions.any? { |prefix| body.start_with?(prefix) }
       end
+
     end
   end
 end

@@ -35,20 +35,30 @@ module NNQ
     # @return [Integer] our SP protocol id (e.g. Protocols::PUSH_V0)
     attr_reader :protocol
 
+
     # @return [Options]
     attr_reader :options
+
+
+    # @return [Routing strategy]
+    attr_reader :routing
+
 
     # @return [Hash{NNQ::Connection => ConnectionLifecycle}]
     attr_reader :connections
 
+
     # @return [SocketLifecycle]
     attr_reader :lifecycle
+
 
     # @return [String, nil]
     attr_reader :last_endpoint
 
+
     # @return [Async::Condition] signaled when a new pipe is registered
     attr_reader :new_pipe
+
 
     # @return [Set<String>] endpoints we have called #connect on; used
     #   to decide whether to schedule a reconnect after a connection
@@ -58,6 +68,9 @@ module NNQ
 
     # @return [Async::Queue, nil] monitor event queue (set by Socket#monitor)
     attr_accessor :monitor_queue
+
+
+    # TODO: API doc
     attr_accessor :verbose_monitor
 
 
@@ -96,27 +109,34 @@ module NNQ
     end
 
 
-    # @return [Routing strategy]
-    attr_reader :routing
-
-
     # @return [Async::Task, nil]
-    def parent_task = @lifecycle.parent_task
+    def parent_task
+      @lifecycle.parent_task
+    end
+
 
     # @return [Async::Barrier, nil]
-    def barrier = @lifecycle.barrier
+    def barrier
+      @lifecycle.barrier
+    end
 
 
-    def closed? = @lifecycle.closed?
+    def closed?
+      @lifecycle.closed?
+    end
 
 
     # @return [Async::Promise] resolves with the first connected peer
-    def peer_connected = @lifecycle.peer_connected
+    def peer_connected
+      @lifecycle.peer_connected
+    end
 
 
     # @return [Async::Promise] resolves when all peers have disconnected
     #   (edge-triggered, after at least one peer connected)
-    def all_peers_gone = @lifecycle.all_peers_gone
+    def all_peers_gone
+      @lifecycle.all_peers_gone
+    end
 
 
     # Called by ConnectionLifecycle teardown. Resolves `all_peers_gone`
@@ -127,7 +147,9 @@ module NNQ
 
 
     # @return [Boolean]
-    def reconnect_enabled = @lifecycle.reconnect_enabled
+    def reconnect_enabled
+      @lifecycle.reconnect_enabled
+    end
 
 
     # Disables or re-enables automatic reconnect. nnq has no reconnect
@@ -173,6 +195,7 @@ module NNQ
     def connect(endpoint)
       @dialed << endpoint
       @last_endpoint = endpoint
+
       if endpoint.start_with?("inproc://")
         transport_for(endpoint).connect(endpoint, self)
       else
@@ -229,7 +252,7 @@ module NNQ
     # strategies (e.g. PUSH send pump) to attach long-lived fibers to
     # the engine's lifecycle. The barrier tracks all spawned tasks so
     # teardown is a single barrier.stop call.
-    def spawn_task(annotation:, barrier: @lifecycle.barrier, &block)
+    def spawn_task(annotation:, barrier: @lifecycle.barrier, &block) # TODO: rename barrier: to parent:
       barrier.async(annotation: annotation, &block)
     end
 
@@ -241,18 +264,22 @@ module NNQ
     # to abort with IOError.
     def close
       return unless @lifecycle.alive?
+
       @lifecycle.start_closing!
       @listeners.each(&:stop)
       drain_send_queue(@options.linger)
       @routing.close if @routing.respond_to?(:close)
+
       # Tear down each remaining connection via its lifecycle. The
       # collection mutates during iteration, so snapshot the values.
       @connections.values.each(&:close!)
+
       # Cascade-cancel every remaining task (reconnect loops, accept
       # loops, supervisors) in one shot.
       @lifecycle.barrier&.stop
       @lifecycle.finish_closing!
       @new_pipe.signal
+
       # Unblock anyone waiting on peer_connected when the socket is
       # closed before a peer ever arrived.
       @lifecycle.peer_connected.resolve(nil) unless @lifecycle.peer_connected.resolved?
@@ -270,6 +297,7 @@ module NNQ
 
     private
 
+
     def close_monitor_queue
       return unless @monitor_queue
       @monitor_queue.enqueue(nil)
@@ -279,11 +307,17 @@ module NNQ
     def drain_send_queue(timeout)
       return unless @routing.respond_to?(:send_queue_drained?)
       return if @connections.empty?
+
       deadline = timeout ? Async::Clock.now + timeout : nil
+
       until @routing.send_queue_drained?
         break if deadline && (deadline - Async::Clock.now) <= 0
         sleep 0.001
       end
+    rescue Async::Stop
+      # Parent task is being cancelled — stop draining and let close
+      # proceed with the rest of teardown instead of propagating the
+      # cancellation out of the ensure path.
     end
 
 
@@ -298,5 +332,6 @@ module NNQ
         end
       end
     end
+
   end
 end

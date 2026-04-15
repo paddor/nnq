@@ -12,8 +12,10 @@ module NNQ
     # @return [Protocol::SP::Connection]
     attr_reader :sp
 
+
     # @return [String, nil] endpoint URI we connected to / accepted from
     attr_reader :endpoint
+
 
     # @param sp [Protocol::SP::Connection] handshake-completed SP connection
     # @param endpoint [String, nil]
@@ -25,7 +27,9 @@ module NNQ
 
 
     # @return [Integer] peer protocol id (e.g. Protocols::PULL_V0)
-    def peer_protocol = @sp.peer_protocol
+    def peer_protocol
+      @sp.peer_protocol
+    end
 
 
     # Writes one message into the SP connection's send buffer (no flush).
@@ -77,7 +81,9 @@ module NNQ
 
 
     # @return [Boolean]
-    def closed? = @closed
+    def closed?
+      @closed
+    end
 
 
     # Closes the underlying SP connection. Safe to call twice.
@@ -86,5 +92,6 @@ module NNQ
       @closed = true
       @sp.close
     end
+
   end
 end

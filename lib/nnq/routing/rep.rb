@@ -30,6 +30,7 @@ module NNQ
     class Rep
       include Backtrace
 
+
       def initialize(engine)
         @engine     = engine
         @recv_queue = Async::Queue.new   # holds [conn, btrace, body]
@@ -47,7 +48,9 @@ module NNQ
         # again without replying is how users drop unwanted requests.
         @mutex.synchronize { @pending = nil }
         item = @recv_queue.dequeue
+
         return nil if item.nil?
+
         conn, btrace, body = item
         @mutex.synchronize { @pending = [conn, btrace] }
         body
@@ -70,7 +73,7 @@ module NNQ
       end
 
 
-      # Called by the engine recv loop with each received frame.
+      # Called by the engine recv loop with each received message.
       def enqueue(body, conn)
         btrace, payload = parse_backtrace(body)
         return unless btrace # malformed/over-TTL — drop

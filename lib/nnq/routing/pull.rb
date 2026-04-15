@@ -6,7 +6,7 @@ module NNQ
   module Routing
     # PULL side: an unbounded queue of received messages. Per-connection
     # recv fibers (spawned by the Engine when each pipe is established)
-    # call {#enqueue} on each frame; user code calls {#receive}.
+    # call {#enqueue} on each message; user code calls {#receive}.
     #
     # No HWM, no prefetch buffer — TCP throttles the senders directly
     # via the kernel buffer.
@@ -41,6 +41,7 @@ module NNQ
       def close_read
         @queue.enqueue(nil)
       end
+
     end
   end
 end

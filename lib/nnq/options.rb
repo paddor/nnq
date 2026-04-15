@@ -20,7 +20,11 @@ module NNQ
     attr_accessor :send_hwm
     attr_accessor :survey_time
 
-    def initialize(linger: nil, send_hwm: DEFAULT_HWM)
+
+    # @param linger [Numeric] linger period in seconds on close
+    #   (default Float::INFINITY = wait forever, matching libzmq).
+    #   Pass 0 for immediate drop-on-close.
+    def initialize(linger: Float::INFINITY, send_hwm: DEFAULT_HWM)
       @linger             = linger
       @read_timeout       = nil
       @write_timeout      = nil
@@ -29,5 +33,6 @@ module NNQ
       @send_hwm           = send_hwm
       @survey_time        = 1.0
     end
+
   end
 end

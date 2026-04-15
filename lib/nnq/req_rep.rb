@@ -19,6 +19,7 @@ module NNQ
 
     private
 
+
     def protocol
       Protocol::SP::Protocols::REQ_V0
     end
@@ -48,6 +49,7 @@ module NNQ
 
     private
 
+
     def protocol
       Protocol::SP::Protocols::REP_V0
     end
@@ -57,6 +59,7 @@ module NNQ
       Routing::Rep.new(engine)
     end
   end
+
 
   REQ = REQ0
   REP = REP0

@@ -31,6 +31,7 @@ module NNQ
             raise Error, "inproc endpoint already bound: #{endpoint}" if @registry.key?(endpoint)
             @registry[endpoint] = engine
           end
+
           Listener.new(endpoint)
         end
 
@@ -46,7 +47,9 @@ module NNQ
         def connect(endpoint, engine)
           bound = @mutex.synchronize { @registry[endpoint] }
           raise Error, "inproc endpoint not bound: #{endpoint}" unless bound
+
           a, b = UNIXSocket.pair
+
           # Handshake on the bound side must run concurrently with
           # ours — if we called bound.handle_accepted synchronously
           # it would block on reading our greeting before we've had
@@ -75,6 +78,7 @@ module NNQ
       class Listener
         attr_reader :endpoint
 
+
         def initialize(endpoint)
           @endpoint = endpoint
         end
@@ -88,6 +92,7 @@ module NNQ
         def stop
           Inproc.unbind(@endpoint)
         end
+
       end
     end
   end

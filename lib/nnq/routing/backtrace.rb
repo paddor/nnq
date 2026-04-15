@@ -18,17 +18,22 @@ module NNQ
       def parse_backtrace(body)
         offset = 0
         hops   = 0
+
         while hops < MAX_HOPS
           return nil if body.bytesize - offset < 4
-          word = body.byteslice(offset, 4)
+
+          word    = body.byteslice(offset, 4)
           offset += 4
           hops   += 1
+
           if word.getbyte(0) & 0x80 != 0
             return [body.byteslice(0, offset), body.byteslice(offset..)]
           end
         end
+
         nil # exceeded TTL without finding terminator
       end
+
     end
   end
 end

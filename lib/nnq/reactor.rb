@@ -22,11 +22,14 @@ module NNQ
     @root_task  = nil
     @work_queue = nil
 
+
     class << self
       def root_task
         return @root_task if @root_task
+
         @mutex.synchronize do
           return @root_task if @root_task
+
           ready       = Thread::Queue.new
           @work_queue = Async::Queue.new
           @thread     = Thread.new { run_reactor(ready) }
@@ -34,6 +37,7 @@ module NNQ
           @root_task  = ready.pop
           at_exit { stop! }
         end
+
         @root_task
       end
 
@@ -42,7 +46,7 @@ module NNQ
         if Async::Task.current?
           yield
         else
-          result = Thread::Queue.new
+          result = Thread::Queue.new # FIXME: use Async::Promise (see OMQ)
           root_task # ensure started
           @work_queue.push([block, result])
           status, value = result.pop
@@ -61,11 +65,14 @@ module NNQ
         @work_queue = nil
       end
 
+
       private
+
 
       def run_reactor(ready)
         Async do |task|
           ready.push(task)
+
           loop do
             item = @work_queue.dequeue
             break if item.nil?
@@ -78,6 +85,7 @@ module NNQ
           end
         end
       end
+
     end
   end
 end

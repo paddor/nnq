@@ -22,7 +22,9 @@ module NNQ
         def bind(endpoint, engine)
           path      = parse_path(endpoint)
           sock_path = to_socket_path(path)
+
           File.delete(sock_path) if !abstract?(path) && File.exist?(sock_path)
+
           server = UNIXServer.new(sock_path)
           Listener.new(endpoint, server, path, engine)
         end
@@ -91,6 +93,7 @@ module NNQ
           @server.close rescue nil
           File.delete(@path) rescue nil unless IPC.abstract?(@path)
         end
+
       end
     end
   end

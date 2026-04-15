@@ -22,6 +22,7 @@ module NNQ
     class Pair
       include SendPump
 
+
       def initialize(engine)
         init_send_pump(engine)
         @recv_queue = Async::Queue.new
@@ -41,7 +42,7 @@ module NNQ
       end
 
 
-      # Called by the recv loop with each frame off the wire.
+      # Called by the recv loop with each message off the wire.
       def enqueue(body, _conn = nil)
         @recv_queue.enqueue(body)
       end
@@ -52,6 +53,7 @@ module NNQ
       # without ever exposing it to pumps.
       def connection_added(conn)
         raise ConnectionRejected, "PAIR socket already has a peer" if @peer
+
         @peer = conn
         spawn_send_pump_for(conn)
       end
@@ -73,6 +75,7 @@ module NNQ
       def close_read
         @recv_queue.enqueue(nil)
       end
+
     end
   end
 end

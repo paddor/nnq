@@ -30,6 +30,7 @@ module NNQ
 
     private
 
+
     def protocol
       Protocol::SP::Protocols::SURVEYOR_V0
     end
@@ -61,6 +62,7 @@ module NNQ
 
 
     private
+
 
     def protocol
       Protocol::SP::Protocols::RESPONDENT_V0

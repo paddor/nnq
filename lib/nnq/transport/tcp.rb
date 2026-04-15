@@ -19,10 +19,11 @@ module NNQ
         # @return [Listener]
         def bind(endpoint, engine)
           host, port = parse_endpoint(endpoint)
-          host = "0.0.0.0" if host == "*"
-          server = TCPServer.new(host, port)
-          actual = server.local_address.ip_port
-          host_part = host.include?(":") ? "[#{host}]" : host
+          host       = "0.0.0.0" if host == "*"
+          server     = TCPServer.new(host, port)
+          actual     = server.local_address.ip_port
+          host_part  = host.include?(":") ? "[#{host}]" : host
+
           Listener.new("tcp://#{host_part}:#{actual}", server, actual, engine)
         end
 
@@ -35,7 +36,8 @@ module NNQ
         # @return [void]
         def connect(endpoint, engine)
           host, port = parse_endpoint(endpoint)
-          sock = ::Socket.tcp(host, port, connect_timeout: connect_timeout(engine.options))
+          sock       = ::Socket.tcp(host, port, connect_timeout: connect_timeout(engine.options))
+
           engine.handle_connected(IO::Stream::Buffered.wrap(sock), endpoint: endpoint)
         end
 
@@ -61,8 +63,13 @@ module NNQ
       # A bound TCP listener.
       #
       class Listener
+        # TODO: API doc
         attr_reader :endpoint
+
+
+        # TODO: API doc
         attr_reader :port
+
 
         def initialize(endpoint, server, port, engine)
           @endpoint = endpoint
@@ -95,6 +102,7 @@ module NNQ
           @task&.stop
           @server.close rescue nil
         end
+
       end
     end
   end

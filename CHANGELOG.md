@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **`linger` default → `Float::INFINITY`** — matches libzmq parity.
+  `Socket#close` waits forever for the send queue to drain. Pass
+  `linger: 0` for the old drop-on-close behavior.
+- **`Socket.new` accepts a block** — File.open-style. The socket is
+  yielded to the block and `#close`d when the block returns (or
+  raises).
+- **`drain_send_queue` rescues `Async::Stop`** — parent-task
+  cancellation during close no longer propagates out of the ensure
+  path; the rest of teardown runs.
+- **Hot-path `Array#first`** — `send_pump` uses `Array#first` instead
+  of `[0]` for YJIT specialization.
 - **Barrier-based cascading teardown** — `SocketLifecycle` owns a
   socket-level `Async::Barrier`; `ConnectionLifecycle` creates a nested
   per-connection barrier. All pumps, accept loops, reconnect loops, and

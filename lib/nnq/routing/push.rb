@@ -17,6 +17,7 @@ module NNQ
     class Push
       include SendPump
 
+
       def initialize(engine)
         init_send_pump(engine)
       end
@@ -38,6 +39,7 @@ module NNQ
       def connection_removed(conn)
         remove_send_pump_for(conn)
       end
+
     end
   end
 end
