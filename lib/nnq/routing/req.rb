@@ -56,6 +56,7 @@ module NNQ
         conn   = pick_peer
         header = [id].pack("N")
         conn.send_message(body, header: header)
+        @engine.emit_verbose_msg_sent(body)
         promise.wait
       ensure
         @mutex.synchronize do
@@ -78,6 +79,12 @@ module NNQ
           end
           # Mismatched id → late/spurious reply, silently dropped.
         end
+      end
+
+
+      # Strips the 4-byte request id for verbose trace previews.
+      def preview_body(wire)
+        wire.byteslice(4..) || wire
       end
 
 

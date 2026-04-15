@@ -70,6 +70,10 @@ module NNQ
     attr_accessor :monitor_queue
 
 
+    # @return [Async::Task, nil] the monitor consumer task, if any
+    attr_accessor :monitor_task
+
+
     # @return [Boolean] when true, {#emit_verbose_monitor_event} forwards
     #   per-message traces (:message_sent / :message_received) to the
     #   monitor queue. Set by {Socket#monitor} via its +verbose:+ kwarg.
@@ -286,6 +290,15 @@ module NNQ
       # collection mutates during iteration, so snapshot the values.
       @connections.values.each(&:close!)
 
+      # Emit :closed, seal the monitor queue, and wait for the monitor
+      # fiber to drain it before cancelling tasks. Without this join,
+      # trailing :message_received events that the recv pump enqueued
+      # just before close would be lost when the barrier.stop below
+      # Async::Stops the monitor fiber mid-dequeue.
+      emit_monitor_event(:closed)
+      close_monitor_queue
+      @monitor_task&.wait
+
       # Cascade-cancel every remaining task (reconnect loops, accept
       # loops, supervisors) in one shot.
       @lifecycle.barrier&.stop
@@ -295,8 +308,6 @@ module NNQ
       # Unblock anyone waiting on peer_connected when the socket is
       # closed before a peer ever arrived.
       @lifecycle.peer_connected.resolve(nil) unless @lifecycle.peer_connected.resolved?
-      emit_monitor_event(:closed)
-      close_monitor_queue
     end
 
 
@@ -337,7 +348,10 @@ module NNQ
       @connections[conn].barrier.async(annotation: "nnq recv #{conn.endpoint}") do
         loop do
           body = conn.receive_message
-          emit_verbose_msg_received(body)
+          if @verbose_monitor
+            preview = @routing.respond_to?(:preview_body) ? @routing.preview_body(body) : body
+            emit_verbose_msg_received(preview)
+          end
           @routing.enqueue(body, conn)
         rescue *CONNECTION_LOST, Async::Stop
           break

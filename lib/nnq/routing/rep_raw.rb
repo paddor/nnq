@@ -36,8 +36,15 @@ module NNQ
         return if to.closed?
         return if Backtrace.too_many_hops?(header)
         to.send_message(body, header: header)
+        @engine.emit_verbose_msg_sent(body)
       rescue ClosedError
         # peer went away between receive and send — drop
+      end
+
+
+      def preview_body(wire)
+        _, payload = parse_backtrace(wire)
+        payload || wire
       end
 
 

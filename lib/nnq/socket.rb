@@ -126,13 +126,14 @@ module NNQ
       @engine.verbose_monitor = verbose
 
       Reactor.run do
-        @engine.spawn_task(annotation: "nnq monitor") do
+        @engine.monitor_task = @engine.spawn_task(annotation: "nnq monitor") do
           while (event = queue.dequeue)
             block.call(event)
           end
         rescue Async::Stop
         ensure
           @engine.monitor_queue = nil
+          @engine.monitor_task  = nil
           block.call(MonitorEvent.new(type: :monitor_stopped))
         end
       end

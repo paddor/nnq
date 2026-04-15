@@ -47,6 +47,12 @@ module NNQ
       end
 
 
+      def preview_body(wire)
+        _, payload = parse_backtrace(wire)
+        payload || wire
+      end
+
+
       def connection_added(conn)
         queue             = Async::LimitedQueue.new(@engine.options.send_hwm)
         @queues[conn]     = queue

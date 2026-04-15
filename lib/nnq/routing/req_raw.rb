@@ -26,6 +26,13 @@ module NNQ
       def send(body, header:)
         conn = pick_peer
         conn.send_message(body, header: header)
+        @engine.emit_verbose_msg_sent(body)
+      end
+
+
+      def preview_body(wire)
+        _, payload = parse_backtrace(wire)
+        payload || wire
       end
 
 

@@ -78,6 +78,12 @@ module NNQ
       end
 
 
+      # Strips the 4-byte survey id for verbose trace previews.
+      def preview_body(wire)
+        wire.byteslice(4..) || wire
+      end
+
+
       def connection_added(conn)
         queue             = Async::LimitedQueue.new(@engine.options.send_hwm)
         @queues[conn]     = queue

@@ -52,6 +52,14 @@ module NNQ
 
         return if conn.closed?
         conn.send_message(body, header: btrace)
+        @engine.emit_verbose_msg_sent(body)
+      end
+
+
+      # Strips the backtrace header for verbose trace previews.
+      def preview_body(wire)
+        _, payload = parse_backtrace(wire)
+        payload || wire
       end
 
 

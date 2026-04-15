@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.6.1 — 2026-04-15
+
+- **Verbose trace (`-vvv`) now fires for cooked REQ/REP/RESPONDENT
+  sends.** Cooked `Req#send_request`, `Rep#send_reply`, and
+  `Respondent#send_reply` bypass `send_pump` and write to the
+  connection directly, so they were never emitting `:message_sent`
+  monitor events — `-vvv` only ever showed the `<<` recv side. Each
+  now calls `emit_verbose_msg_sent(body)` after the write. Raw
+  REQ/REP/RESPONDENT sends get the same treatment (raw surveyor
+  already emitted via its per-peer send pump).
+- **Verbose recv previews strip the SP backtrace header.** The recv
+  loop used to emit the raw wire body, so `-vvv` traces for
+  REQ/REP/SURVEYOR/RESPONDENT showed the 4-byte request/survey id
+  (or a multi-word backtrace stack) in front of the payload. Routing
+  strategies now expose an optional `preview_body(wire)` hook; the
+  engine calls it before emitting `:message_received` so the trace
+  shows just the payload.
+- **`Engine#close` drains the monitor queue before cancelling
+  tasks.** The monitor consumer fiber lives under the socket-level
+  barrier, so `barrier.stop` used to `Async::Stop` it before it had
+  a chance to drain trailing events. `close` now emits `:closed`,
+  enqueues the nil sentinel, and awaits the stored `monitor_task`
+  before stopping the barrier. Fixes flaky `-vvv` traces on
+  short-lived sockets where the last `:message_received` event
+  would occasionally be lost.
+
 ## 0.6.0 — 2026-04-15
 
 - **NNG-style raw mode for REQ/REP and SURVEYOR/RESPONDENT.** Constructing
