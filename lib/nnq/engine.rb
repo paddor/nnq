@@ -70,7 +70,9 @@ module NNQ
     attr_accessor :monitor_queue
 
 
-    # TODO: API doc
+    # @return [Boolean] when true, {#emit_verbose_monitor_event} forwards
+    #   per-message traces (:message_sent / :message_received) to the
+    #   monitor queue. Set by {Socket#monitor} via its +verbose:+ kwarg.
     attr_accessor :verbose_monitor
 
 
@@ -248,12 +250,13 @@ module NNQ
     end
 
 
-    # Spawns a task under the socket's barrier. Used by routing
-    # strategies (e.g. PUSH send pump) to attach long-lived fibers to
-    # the engine's lifecycle. The barrier tracks all spawned tasks so
-    # teardown is a single barrier.stop call.
-    def spawn_task(annotation:, barrier: @lifecycle.barrier, &block) # TODO: rename barrier: to parent:
-      barrier.async(annotation: annotation, &block)
+    # Spawns a task under the given parent barrier (defaults to the
+    # socket-level barrier). Used by routing strategies (e.g. PUSH send
+    # pump) to attach long-lived fibers to the engine's lifecycle. The
+    # parent barrier tracks every spawned task so teardown is a single
+    # barrier.stop call.
+    def spawn_task(annotation:, parent: @lifecycle.barrier, &block)
+      parent.async(annotation: annotation, &block)
     end
 
 

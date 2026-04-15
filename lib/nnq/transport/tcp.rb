@@ -63,11 +63,14 @@ module NNQ
       # A bound TCP listener.
       #
       class Listener
-        # TODO: API doc
+        # @return [String] the normalised endpoint URL this listener is
+        #   bound to (with the resolved port substituted when the user
+        #   bound to port 0).
         attr_reader :endpoint
 
-
-        # TODO: API doc
+        # @return [Integer] the actual TCP port the listener is bound
+        #   to. Equals the requested port unless 0 was requested, in
+        #   which case it reflects the kernel-assigned ephemeral port.
         attr_reader :port
 
 

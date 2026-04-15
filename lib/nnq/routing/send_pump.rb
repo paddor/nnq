@@ -21,11 +21,13 @@ module NNQ
     # {#spawn_send_pump_for} from their #connection_added hook.
     #
     module SendPump
-      # TODO: API doc
+      # Max messages a single pump will drain from the shared queue in
+      # one batch before yielding. Bounds the worst-case latency other
+      # pumps wait when the queue is under sustained pressure.
       BATCH_MSG_CAP  = 256
 
-
-      # TODO: API doc
+      # Max cumulative body bytes in one batch. Keeps a single pump
+      # from monopolising the writer mutex on huge payloads.
       BATCH_BYTE_CAP = 256 * 1024
 
 
@@ -85,9 +87,9 @@ module NNQ
       # @param conn [Connection]
       def spawn_send_pump_for(conn)
         annotation = "nnq send pump #{conn.endpoint}"
-        barrier    = @engine.connections[conn]&.barrier || @engine.barrier
+        parent     = @engine.connections[conn]&.barrier || @engine.barrier
 
-        task = @engine.spawn_task(annotation:, barrier:) do
+        task = @engine.spawn_task(annotation:, parent:) do
           loop do
             first = @send_queue.dequeue
             break if first.nil? # queue closed

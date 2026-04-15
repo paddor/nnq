@@ -46,12 +46,10 @@ module NNQ
         if Async::Task.current?
           yield
         else
-          result = Thread::Queue.new # FIXME: use Async::Promise (see OMQ)
+          result = Async::Promise.new
           root_task # ensure started
           @work_queue.push([block, result])
-          status, value = result.pop
-          raise value if status == :error
-          value
+          result.wait
         end
       end
 
@@ -74,14 +72,9 @@ module NNQ
           ready.push(task)
 
           loop do
-            item = @work_queue.dequeue
-            break if item.nil?
+            item = @work_queue.dequeue or break
             block, result = item
-            task.async do
-              result.push([:ok, block.call])
-            rescue => e
-              result.push([:error, e])
-            end
+            task.async { result.fulfill { block.call } }
           end
         end
       end

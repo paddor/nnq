@@ -120,9 +120,9 @@ module NNQ
 
       def spawn_pump(conn, queue)
         annotation = "nnq surveyor pump #{conn.endpoint}"
-        barrier    = @engine.connections[conn]&.barrier || @engine.barrier
+        parent     = @engine.connections[conn]&.barrier || @engine.barrier
 
-        @engine.spawn_task(annotation:, barrier:) do
+        @engine.spawn_task(annotation:, parent:) do
           loop do
             body = queue.dequeue
             conn.send_message(body)

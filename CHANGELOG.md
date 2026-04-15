@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **`Reactor.run` uses `Async::Promise`** — replaces the
+  `Thread::Queue` + manual `[:ok,val]`/`[:error,exc]` tagging with a
+  single `result.fulfill { block.call }` + `result.wait` pair.
+- **`Engine#spawn_task(parent:)`** — renamed from `barrier:` to make it
+  clear any parent barrier is accepted, not just the socket-level one.
 - **`linger` default → `Float::INFINITY`** — matches libzmq parity.
   `Socket#close` waits forever for the send queue to drain. Pass
   `linger: 0` for the old drop-on-close behavior.
