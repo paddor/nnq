@@ -20,9 +20,8 @@ require "json"
 Console.logger = Console::Logger.new(Console::Output::Null.new)
 
 module BenchHelper
-  # Sizes cover four orders of magnitude:
-  #   tiny (64 B), small (1 KiB), medium (8 KiB), large (64 KiB)
-  SIZES = [64, 1024, 8192, 65_536].freeze
+  # ×4 geometric sweep from 128 B to 32 KiB.
+  SIZES = [128, 512, 2048, 8192, 32_768].freeze
 
   # Each cell runs ROUNDS timed rounds and reports the fastest one.
   # Transient jitter (GC, scheduler preemption, YJIT tier-up, kernel
@@ -62,7 +61,7 @@ module BenchHelper
 
   # Per-size timeout in seconds. Each cell does prime + calibration +
   # ROUNDS × ROUND_DURATION, roughly 4-5s; 30s leaves headroom for the
-  # slowest cells (TCP 64 KiB under load).
+  # slowest cells (TCP 32 KiB under load).
   RUN_TIMEOUT = Integer(ENV.fetch("NNQ_BENCH_TIMEOUT", 30))
 
   def run(label, dir:, peer_counts: [1, 3], &block)
