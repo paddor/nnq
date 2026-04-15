@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-04-15
 
 - **Send-path freezes the body** — every public send method (PUSH,
   PUB, PAIR, BUS, REQ, REP, SURVEYOR, RESPONDENT) routes the body
