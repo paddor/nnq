@@ -55,7 +55,7 @@ module NNQ
 
         conn   = pick_peer
         header = [id].pack("N")
-        conn.send_message(header + body)
+        conn.send_message(body, header: header)
         promise.wait
       ensure
         @mutex.synchronize do

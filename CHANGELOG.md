@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.6.0 — 2026-04-15
+
+- **NNG-style raw mode for REQ/REP and SURVEYOR/RESPONDENT.** Constructing
+  any of the four with `raw: true` bypasses the cooked state machine
+  (request-id tracking, pending-reply slot, survey window) and exposes
+  the full SP backtrace header as an opaque, caller-supplied handle.
+  - `#receive` returns `[pipe, header, body]` where `pipe` is the live
+    `NNQ::Connection` that delivered the message (idiomatic Ruby handle
+    — no opaque pipe_id token, no lookup registry), `header` is the
+    parsed backtrace bytes, and `body` is the payload.
+  - Raw REQ/SURVEYOR send: `send(body, header:)` — fans round-robin /
+    fans out.
+  - Raw REP/RESPONDENT send: `send(body, to:, header:)` — routes
+    directly to a prior `pipe` with the stored `header` written
+    verbatim, so the cooked peer matches the reply. Closed peer or
+    over-TTL header → silent drop (matches NNG behavior).
+  - Cooked-mode methods (`send_request`, `send_reply`, `send_survey`)
+    raise `NNQ::Error` in raw mode and vice versa.
+  - Unblocks proxy/device-style use cases (forwarders, request routers)
+    without touching the cooked code paths. `lib/nnq/routing/{req,rep,
+    surveyor,respondent}_raw.rb` live alongside their cooked siblings;
+    `build_routing` branches on `@raw` inside REQ0/REP0/SURVEYOR0/
+    RESPONDENT0. PUB/SUB and PUSH/PULL raw are still out of scope.
+- **Zero-alloc cooked send paths via protocol-sp `header:` kwarg.**
+  `Connection#send_message` / `#write_message` grow an optional
+  `header:` kwarg that protocol-sp writes between the SP length prefix
+  and the body as a third buffered write (coalesced into a single
+  `writev`). Cooked `Req#send_request`, `Rep#send_reply`, and
+  `Respondent#send_reply` no longer allocate the `header + body`
+  intermediate String on every send — the savings apply to every
+  REQ/REP round trip regardless of whether raw mode is used.
+  Requires `protocol-sp >= 0.3`.
+- **`Options#recv_hwm`** — new option, defaults to `Options::DEFAULT_HWM`
+  (same as `send_hwm`). Bounds the raw routing strategies' receive
+  queues; the cooked paths still use their existing (unbounded) state
+  and are unaffected.
+
 ## 0.5.0 — 2026-04-15
 
 - **Send-path freezes the body** — every public send method (PUSH,

@@ -34,6 +34,14 @@ module NNQ
         nil # exceeded TTL without finding terminator
       end
 
+
+      # Raw-mode TTL check: returns true if +header+ contains at least
+      # MAX_HOPS 4-byte words (i.e. forwarding it would push total hops
+      # over the cap). Cheap: just bytesize arithmetic.
+      def self.too_many_hops?(header)
+        header.bytesize >= MAX_HOPS * 4
+      end
+
     end
   end
 end

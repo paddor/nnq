@@ -35,10 +35,12 @@ module NNQ
     # Writes one message into the SP connection's send buffer (no flush).
     #
     # @param body [String]
+    # @param header [String, nil] optional binary prefix written between
+    #   the SP length prefix and body (see Protocol::SP::Connection)
     # @return [void]
-    def write_message(body)
+    def write_message(body, header: nil)
       raise ClosedError, "connection closed" if @closed
-      @sp.write_message(body)
+      @sp.write_message(body, header: header)
     end
 
 
@@ -57,10 +59,11 @@ module NNQ
     # each call is request-paced and there's nothing to batch.
     #
     # @param body [String]
+    # @param header [String, nil] optional binary prefix
     # @return [void]
-    def send_message(body)
+    def send_message(body, header: nil)
       raise ClosedError, "connection closed" if @closed
-      @sp.send_message(body)
+      @sp.send_message(body, header: header)
     end
 
 

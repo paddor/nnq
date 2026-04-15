@@ -32,9 +32,9 @@ module NNQ
 
     # @yieldparam [self] the socket; when a block is passed the socket
     #   is {#close}d when the block returns (or raises), File.open-style.
-    def initialize(raw: false, linger: Float::INFINITY, send_hwm: Options::DEFAULT_HWM)
+    def initialize(raw: false, linger: Float::INFINITY, send_hwm: Options::DEFAULT_HWM, recv_hwm: Options::DEFAULT_HWM)
       @raw     = raw
-      @options = Options.new(linger: linger, send_hwm: send_hwm)
+      @options = Options.new(linger: linger, send_hwm: send_hwm, recv_hwm: recv_hwm)
       @engine  = Engine.new(protocol: protocol, options: @options) { |engine| build_routing(engine) }
 
       begin

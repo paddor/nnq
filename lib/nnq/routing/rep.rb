@@ -69,7 +69,7 @@ module NNQ
         end
 
         return if conn.closed?
-        conn.send_message(btrace + body)
+        conn.send_message(body, header: btrace)
       end
 
 

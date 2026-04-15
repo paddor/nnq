@@ -1,0 +1,54 @@
+# frozen_string_literal: true
+
+require "async/limited_queue"
+require_relative "backtrace"
+
+module NNQ
+  module Routing
+    # Raw RESPONDENT: mirror of {RepRaw} for the survey pattern.
+    # No survey-window state, no pending slot — the app receives
+    # `[pipe, header, body]` tuples and chooses whether (and when)
+    # to reply via `send(body, to:, header:)`.
+    #
+    class RespondentRaw
+      include Backtrace
+
+
+      def initialize(engine)
+        @engine     = engine
+        @recv_queue = Async::LimitedQueue.new(engine.options.recv_hwm)
+      end
+
+
+      def receive
+        @recv_queue.dequeue
+      end
+
+
+      def send(body, to:, header:)
+        return if to.closed?
+        return if Backtrace.too_many_hops?(header)
+        to.send_message(body, header: header)
+      rescue ClosedError
+      end
+
+
+      def enqueue(wire_bytes, conn)
+        header, payload = parse_backtrace(wire_bytes)
+        return unless header
+        @recv_queue.enqueue([conn, header, payload])
+      end
+
+
+      def close
+        @recv_queue.enqueue(nil)
+      end
+
+
+      def close_read
+        @recv_queue.enqueue(nil)
+      end
+
+    end
+  end
+end
