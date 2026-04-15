@@ -141,8 +141,8 @@ module NNQ
 
         conn.flush
 
-        batch.each do |body|
-          @engine.emit_verbose_monitor_event(:message_sent, body: body)
+        if @engine.verbose_monitor
+          batch.each { |body| @engine.emit_verbose_msg_sent(body) }
         end
       end
 

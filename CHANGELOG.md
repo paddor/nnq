@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Hot-path: no kwargs splat on verbose monitor emit** —
+  `emit_verbose_monitor_event(type, **detail)` replaced with dedicated
+  `emit_verbose_msg_sent(body)` / `emit_verbose_msg_received(body)`
+  helpers. Early-returns before allocating the detail hash, so the
+  send/recv loops pay nothing when `-vvv` is off. Send pump also
+  hoists the `verbose_monitor` check out of the batch `.each`.
+- **YJIT-friendly `all?` blocks** — `@queues.each_value.all?(&:empty?)`
+  → explicit `{ |q| q.empty? }` in pub/bus/surveyor `drained?`
+  (YJIT specializes explicit blocks, not `Symbol#to_proc`).
 - **`Reactor.run` uses `Async::Promise`** — replaces the
   `Thread::Queue` + manual `[:ok,val]`/`[:error,exc]` tagging with a
   single `result.fulfill { block.call }` + `result.wait` pair.

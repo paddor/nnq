@@ -103,11 +103,20 @@ module NNQ
     end
 
 
-    # Emits a verbose-only monitor event. Only forwarded when
-    # {Socket#monitor} was called with +verbose: true+.
-    def emit_verbose_monitor_event(type, **detail)
+    # Emits a :message_sent verbose event. Early-returns before
+    # allocating the detail hash so the hot send path pays nothing
+    # when verbose monitoring is off.
+    def emit_verbose_msg_sent(body)
       return unless @verbose_monitor
-      emit_monitor_event(type, detail: detail)
+      emit_monitor_event(:message_sent, detail: { body: body })
+    end
+
+
+    # Emits a :message_received verbose event. Same early-return
+    # discipline as {#emit_verbose_msg_sent}.
+    def emit_verbose_msg_received(body)
+      return unless @verbose_monitor
+      emit_monitor_event(:message_received, detail: { body: body })
     end
 
 
@@ -328,7 +337,7 @@ module NNQ
       @connections[conn].barrier.async(annotation: "nnq recv #{conn.endpoint}") do
         loop do
           body = conn.receive_message
-          emit_verbose_monitor_event(:message_received, body: body)
+          emit_verbose_msg_received(body)
           @routing.enqueue(body, conn)
         rescue *CONNECTION_LOST, Async::Stop
           break

@@ -60,7 +60,7 @@ module NNQ
 
       # True once every peer's queue is empty. Engine linger polls this.
       def send_queue_drained?
-        @queues.each_value.all?(&:empty?)
+        @queues.each_value.all? { |q| q.empty? }
       end
 
 
@@ -82,7 +82,7 @@ module NNQ
           loop do
             body = queue.dequeue
             conn.send_message(body)
-            @engine.emit_verbose_monitor_event(:message_sent, body: body)
+            @engine.emit_verbose_msg_sent(body)
           rescue EOFError, IOError, Errno::EPIPE, Errno::ECONNRESET
             break
           end
