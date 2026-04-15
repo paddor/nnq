@@ -83,7 +83,7 @@ module BenchHelper
             task.with_timeout(RUN_TIMEOUT) do
               NNQ::Transport::Inproc.reset! if transport == "inproc"
               ep = endpoint(transport, seq)
-              r  = block.call(transport, ep, peers, "x" * size)
+              r  = block.call(transport, ep, peers, ("x" * size).b.freeze)
               append_result(pattern, transport, peers, size, r[:n], r[:elapsed], r[:mbps], r[:msgs_s])
               completed += 1
             end
