@@ -13,6 +13,7 @@ module NNQ
     # Sends +body+ as a request, blocks until the matching reply
     # arrives. Returns the reply body (without the id header).
     def send_request(body)
+      body = frozen_binary(body)
       Reactor.run { @engine.routing.send_request(body) }
     end
 
@@ -43,6 +44,7 @@ module NNQ
 
     # Routes +body+ back to the pipe the most recent #receive came from.
     def send_reply(body)
+      body = frozen_binary(body)
       Reactor.run { @engine.routing.send_reply(body) }
     end
 

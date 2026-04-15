@@ -139,6 +139,19 @@ module NNQ
     end
 
 
+    # Coerces +body+ to a frozen binary string. Called by every send
+    # method so a caller can't mutate the string after it's been
+    # enqueued (the body sits in a send queue or per-peer queue until
+    # the pump writes it, and an unfrozen caller-owned buffer could be
+    # appended to mid-flight).
+    #
+    # Fast-path: already frozen + binary → returned as-is.
+    def frozen_binary(body)
+      return body if body.frozen? && body.encoding == Encoding::BINARY
+      body.b.freeze
+    end
+
+
     private
 
 

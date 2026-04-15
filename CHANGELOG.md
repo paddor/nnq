@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Send-path freezes the body** — every public send method (PUSH,
+  PUB, PAIR, BUS, REQ, REP, SURVEYOR, RESPONDENT) routes the body
+  through `Socket#frozen_binary`, which coerces to a frozen binary
+  string. Fast path: already frozen and binary → returned as-is, no
+  allocation. Slow path: `body.b.freeze` (one copy). Prevents a
+  caller from mutating the string after it has been enqueued (the
+  body can sit in a send queue or per-peer queue until a pump
+  writes it).
 - **Hot-path: no kwargs splat on verbose monitor emit** —
   `emit_verbose_monitor_event(type, **detail)` replaced with dedicated
   `emit_verbose_msg_sent(body)` / `emit_verbose_msg_received(body)`

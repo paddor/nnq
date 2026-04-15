@@ -15,6 +15,7 @@ module NNQ
   class SURVEYOR0 < Socket
     # Broadcasts +body+ as a survey to all connected respondents.
     def send_survey(body)
+      body = frozen_binary(body)
       Reactor.run { @engine.routing.send_survey(body) }
     end
 
@@ -57,6 +58,7 @@ module NNQ
 
     # Routes +body+ back to the surveyor that sent the most recent survey.
     def send_reply(body)
+      body = frozen_binary(body)
       Reactor.run { @engine.routing.send_reply(body) }
     end
 

@@ -12,6 +12,7 @@ module NNQ
   #
   class PUB0 < Socket
     def send(body)
+      body = frozen_binary(body)
       Reactor.run { @engine.routing.send(body) }
     end
 
