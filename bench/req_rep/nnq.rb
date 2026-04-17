@@ -18,10 +18,8 @@ BenchHelper.run("REQ/REP", dir: __dir__, peer_counts: [1]) do |transport, ep, _p
       end
     end
 
-    burst = ->(k) { k.times { req.send_request(payload) } }
-
     begin
-      BenchHelper.measure_best_of(payload, &burst)
+      BenchHelper.measure_roundtrip(req, responder, payload)
     ensure
       responder.stop
       req.close

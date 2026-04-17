@@ -17,11 +17,12 @@ require "async"
 require "async/clock"
 require "console"
 require "json"
+require "set"
 Console.logger = Console::Logger.new(Console::Output::Null.new)
 
 module BenchHelper
   # ×4 geometric sweep from 128 B to 32 KiB.
-  SIZES = [128, 512, 2048, 8192, 32_768].freeze
+  SIZES = (ENV["NNQ_BENCH_SIZES"] || "128,512,2048,8192,32768").split(",").map(&:to_i).freeze
 
   # Each cell runs ROUNDS timed rounds and reports the fastest one.
   # Transient jitter (GC, scheduler preemption, YJIT tier-up, kernel
@@ -53,7 +54,7 @@ module BenchHelper
   #   inproc — in-process upper bound
   #   ipc    — Unix-domain sockets, no TCP stack
   #   tcp    — primary networked path
-  TRANSPORTS = %w[inproc ipc tcp].freeze
+  TRANSPORTS = (ENV["NNQ_BENCH_TRANSPORTS"] || "inproc,ipc,tcp").split(",").freeze
 
   def run_id
     @run_id ||= ENV["NNQ_BENCH_RUN_ID"] || Time.now.strftime("%Y-%m-%dT%H:%M:%S")
@@ -65,6 +66,7 @@ module BenchHelper
   RUN_TIMEOUT = Integer(ENV.fetch("NNQ_BENCH_TIMEOUT", 30))
 
   def run(label, dir:, peer_counts: [1, 3], &block)
+    peer_counts = ENV["NNQ_BENCH_PEERS"].split(",").map(&:to_i) if ENV["NNQ_BENCH_PEERS"]
     pattern = File.basename(dir)
     jit     = defined?(RubyVM::YJIT) && RubyVM::YJIT.enabled? ? "+YJIT" : "no JIT"
     puts "#{label} | NNQ #{NNQ::VERSION} | Ruby #{RUBY_VERSION} (#{jit}) | #{KERNEL}"
@@ -127,9 +129,7 @@ module BenchHelper
   def estimate_n(target: ROUND_DURATION, warmup: WARMUP_DURATION)
     n = WARMUP_MIN_ITERS
     loop do
-      t0 = Async::Clock.now
-      yield n
-      elapsed = Async::Clock.now - t0
+      elapsed = Async::Clock.measure { yield n }
       if elapsed >= warmup
         rate = n / elapsed
         return [(rate * target).to_i, WARMUP_MIN_ITERS].max
@@ -149,9 +149,7 @@ module BenchHelper
 
     best = nil
     ROUNDS.times do
-      t0 = Async::Clock.now
-      burst.call(n)
-      elapsed = Async::Clock.now - t0
+      elapsed = Async::Clock.measure { burst.call(n) }
       best = elapsed if best.nil? || elapsed < best
     end
 
@@ -170,6 +168,14 @@ module BenchHelper
     measure_best_of(payload, align: senders.size, &burst)
   end
 
+
+  # REQ/REP or PAIR-as-roundtrip measurement: each iteration does one
+  # send+receive on +requester+. Caller owns the responder task.
+  def measure_roundtrip(requester, _responder_task, payload)
+    burst = ->(k) { k.times { requester.send_request(payload) } }
+    measure_best_of(payload, &burst)
+  end
+
   def report(msg_size, n, elapsed)
     mbps   = n * msg_size / elapsed / 1_000_000.0
     msgs_s = n / elapsed
@@ -185,6 +191,26 @@ module BenchHelper
   # on each dialer's own promise is edge-triggered.
   def wait_connected(*sockets)
     sockets.flatten.each { |s| s.peer_connected.wait }
+  end
+
+
+  # Waits until every SUB has an active subscription at the PUB by
+  # sending empty probe messages until each sub receives one. Closes
+  # the gap between `peer_connected` (TCP up) and SUBSCRIBE message
+  # propagation (prefix table installed on the PUB side).
+  def wait_subscribed(pub, subs)
+    pending = subs.to_set
+    until pending.empty?
+      pub.send("")
+      pending.each do |sub|
+        begin
+          Async::Task.current.with_timeout(0.01) { sub.receive }
+          pending.delete(sub)
+        rescue Async::TimeoutError
+          # subscription not yet propagated
+        end
+      end
+    end
   end
 
   def append_result(pattern, transport, peers, msg_size, msg_count, elapsed, mbps, msgs_s)

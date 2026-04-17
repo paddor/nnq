@@ -2,31 +2,6 @@
 
 module NNQ
   class Engine
-    # Connection errors that should trigger a reconnect retry rather
-    # than propagate. Mutable at load time so plugins (e.g. a future
-    # TLS transport) can append their own error classes; frozen on
-    # first {Engine#connect}.
-    CONNECTION_FAILED = [
-      Errno::ECONNREFUSED,
-      Errno::EHOSTUNREACH,
-      Errno::ENETUNREACH,
-      Errno::ENOENT,
-      Errno::EPIPE,
-      Errno::ETIMEDOUT,
-      Socket::ResolutionError,
-    ]
-
-    # Errors that indicate an established connection went away. Used
-    # by the recv loop and pumps to silently terminate (the connection
-    # lifecycle's #lost! handler decides whether to reconnect).
-    CONNECTION_LOST = [
-      EOFError,
-      IOError,
-      Errno::ECONNRESET,
-      Errno::EPIPE,
-    ]
-
-
     # Schedules reconnect attempts with exponential back-off.
     #
     # Runs a background task that loops until a connection is
@@ -61,7 +36,7 @@ module NNQ
             sleep quantized_wait(delay) if delay > 0
             break if @engine.closed?
             begin
-              @engine.transport_for(@endpoint).connect(@endpoint, @engine)
+              @engine.transport_for(@endpoint).connect(@endpoint, @engine, **@engine.dial_opts_for(@endpoint))
               break
             rescue *CONNECTION_FAILED, *CONNECTION_LOST => e
               delay = next_delay(delay, max_delay)

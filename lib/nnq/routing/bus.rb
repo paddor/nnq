@@ -22,7 +22,6 @@ module NNQ
       def initialize(engine)
         @engine     = engine
         @queues     = {} # conn => Async::LimitedQueue
-        @pump_tasks = {} # conn => Async::Task
         @recv_queue = Async::Queue.new
       end
 
@@ -52,18 +51,13 @@ module NNQ
 
       def connection_added(conn)
         queue = Async::LimitedQueue.new(@engine.options.send_hwm)
-        @queues[conn]     = queue
-        @pump_tasks[conn] = spawn_pump(conn, queue)
+        @queues[conn] = queue
+        spawn_pump(conn, queue)
       end
 
 
       def connection_removed(conn)
         @queues.delete(conn)
-        task = @pump_tasks.delete(conn)
-        return unless task
-        return if task == Async::Task.current
-        task.stop
-      rescue IOError, Errno::EPIPE
       end
 
 
@@ -73,8 +67,6 @@ module NNQ
 
 
       def close
-        @pump_tasks.each_value(&:stop)
-        @pump_tasks.clear
         @queues.clear
         @recv_queue.enqueue(nil)
       end

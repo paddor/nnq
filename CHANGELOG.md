@@ -1,5 +1,41 @@
 # Changelog
 
+## Unreleased
+
+- **Routing pumps shed their `@pump_tasks` bookkeeping.** `bus`, `pub`,
+  `surveyor`, and `surveyor_raw` no longer track per-connection pump
+  tasks in a hash. Pumps are spawned under
+  `@engine.connections[conn].barrier`, so `ConnectionLifecycle#tear_down!`
+  already cascade-cancels them on `barrier.stop` — the hash was dead
+  weight.
+- **Transport registry is pluggable.** `NNQ::Engine.transports` is now a
+  mutable class-level `Hash` instead of a frozen constant; each built-in
+  transport (`tcp`, `ipc`, `inproc`) self-registers at load with
+  `Engine.transports["…"] = self`. External transports (e.g. `nnq-zstd`'s
+  `zstd+tcp://`) can register themselves the same way.
+- **`ConnectionLifecycle` calls `transport.wrap_connection(conn, engine)`
+  after handshake.** Transports that implement the hook can return a
+  delegating wrapper that layers compression / TLS / instrumentation
+  over the raw `NNQ::Connection` without the engine caring. Transports
+  without the hook (tcp/ipc/inproc) pass through unchanged.
+- **`lib/nnq.rb` restructured to mirror `lib/omq.rb`.** Requires split
+  into Core / Transport / Socket-types sections. New
+  `lib/nnq/constants.rb` owns `MonitorEvent`, the `CONNECTION_LOST` /
+  `CONNECTION_FAILED` error arrays, and `NNQ.freeze_for_ractors!` — all
+  previously scattered across `engine.rb`, `reconnect.rb`,
+  `monitor_event.rb`, and the top-level `nnq.rb`. `monitor_event.rb` is
+  removed (absorbed into constants).
+- **Benchmarks: richer scaffolding, measured via `Async::Clock`.**
+  `BenchHelper` gains `NNQ_BENCH_SIZES` / `NNQ_BENCH_TRANSPORTS` /
+  `NNQ_BENCH_PEERS` env overrides, a `measure_roundtrip` helper for
+  REQ/REP-style patterns, and a `wait_subscribed` helper that closes
+  the gap between TCP connect and SUBSCRIBE propagation. All elapsed
+  measurements use `Async::Clock.measure { … }` blocks instead of
+  `Process.clock_gettime`. `bench/report.rb --update-readme` now
+  falls back to the most recent row per cell across all history, so a
+  partial bench run refreshes only the cells it covers instead of
+  clobbering untouched cells with "—".
+
 ## 0.6.1 — 2026-04-15
 
 - **Verbose trace (`-vvv`) now fires for cooked REQ/REP/RESPONDENT

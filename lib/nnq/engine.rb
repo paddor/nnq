@@ -4,16 +4,9 @@ require "async"
 require "async/clock"
 require "set"
 require "protocol/sp"
-require_relative "error"
-require_relative "connection"
-require_relative "monitor_event"
-require_relative "reactor"
 require_relative "engine/socket_lifecycle"
 require_relative "engine/connection_lifecycle"
 require_relative "engine/reconnect"
-require_relative "transport/tcp"
-require_relative "transport/ipc"
-require_relative "transport/inproc"
 
 module NNQ
   # Per-socket orchestrator. Owns the listener set, the connection map
@@ -25,11 +18,18 @@ module NNQ
   # no HWM bookkeeping, no mechanisms, no heartbeat, no monitor queue.
   #
   class Engine
-    TRANSPORTS = {
-      "tcp"    => Transport::TCP,
-      "ipc"    => Transport::IPC,
-      "inproc" => Transport::Inproc,
-    }
+    # Scheme → transport module registry. Each transport file
+    # self-registers on require; plugins (e.g. nnq-zstd) add more:
+    #
+    #   NNQ::Engine.transports["zstd+tcp"] = NNQ::Transport::ZstdTcp
+    #
+    @transports = {}
+
+
+    class << self
+      # @return [Hash{String => Module}] registered transports
+      attr_reader :transports
+    end
 
 
     # @return [Integer] our SP protocol id (e.g. Protocols::PUSH_V0)
@@ -95,6 +95,7 @@ module NNQ
       @monitor_queue   = nil
       @verbose_monitor = false
       @dialed          = Set.new
+      @dial_opts       = {} # endpoint => kwargs for transport.connect on reconnect
       @routing         = yield(self)
     end
 
@@ -191,9 +192,9 @@ module NNQ
 
 
     # Binds to +endpoint+. Synchronous: errors propagate.
-    def bind(endpoint)
+    def bind(endpoint, **opts)
       transport = transport_for(endpoint)
-      listener  = transport.bind(endpoint, self)
+      listener  = transport.bind(endpoint, self, **opts)
       listener.start_accept_loop(@lifecycle.barrier) do |io, framing = :tcp|
         handle_accepted(io, endpoint: endpoint, framing: framing)
       end
@@ -207,16 +208,25 @@ module NNQ
     # actual dial happens inside a background reconnect task that
     # retries with exponential back-off until the peer becomes
     # reachable. Inproc connect is synchronous and instant.
-    def connect(endpoint)
+    def connect(endpoint, **opts)
       @dialed << endpoint
+      @dial_opts[endpoint] = opts unless opts.empty?
       @last_endpoint = endpoint
 
       if endpoint.start_with?("inproc://")
-        transport_for(endpoint).connect(endpoint, self)
+        transport_for(endpoint).connect(endpoint, self, **opts)
       else
         emit_monitor_event(:connect_delayed, endpoint: endpoint)
         Reconnect.schedule(endpoint, @options, @lifecycle.barrier, self, delay: 0)
       end
+    end
+
+
+    # Transport options captured from {#connect} for +endpoint+. Used by
+    # {Reconnect} to re-dial with the original kwargs. Empty hash for
+    # endpoints connected without extra options.
+    def dial_opts_for(endpoint)
+      @dial_opts[endpoint] || {}
     end
 
 
@@ -235,7 +245,7 @@ module NNQ
     # transport from the URL each iteration.
     def transport_for(endpoint)
       scheme = endpoint[/\A([a-z+]+):\/\//i, 1] or raise Error, "no scheme: #{endpoint}"
-      TRANSPORTS[scheme] or raise Error, "unsupported transport: #{scheme}"
+      Engine.transports[scheme] or raise Error, "unsupported transport: #{scheme}"
     end
 
 

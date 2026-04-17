@@ -1,23 +1,24 @@
 # frozen_string_literal: true
 
 require "protocol/sp"
+require "io/stream"
 
-module NNQ
-  # Freezes module-level state so NNQ sockets can be used inside Ractors.
-  # Call this once before spawning any Ractors that create NNQ sockets.
-  #
-  def self.freeze_for_ractors!
-    Engine::CONNECTION_FAILED.freeze
-    Engine::CONNECTION_LOST.freeze
-    Engine::TRANSPORTS.freeze
-  end
-end
 
+# Core
 require_relative "nnq/version"
-require_relative "nnq/error"
+require_relative "nnq/constants"
+require_relative "nnq/reactor"
 require_relative "nnq/options"
+require_relative "nnq/error"
 require_relative "nnq/connection"
 require_relative "nnq/engine"
+
+# Transport
+require_relative "nnq/transport/inproc"
+require_relative "nnq/transport/tcp"
+require_relative "nnq/transport/ipc"
+
+# Socket types
 require_relative "nnq/socket"
 require_relative "nnq/push_pull"
 require_relative "nnq/pair"

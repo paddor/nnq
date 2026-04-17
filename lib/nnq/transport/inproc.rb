@@ -16,6 +16,8 @@ module NNQ
     # implementation.
     #
     module Inproc
+      Engine.transports["inproc"] = self
+
       @registry = {}
       @mutex    = Mutex.new
 
@@ -26,7 +28,7 @@ module NNQ
         # @param endpoint [String] e.g. "inproc://my-endpoint"
         # @param engine [Engine]
         # @return [Listener]
-        def bind(endpoint, engine)
+        def bind(endpoint, engine, **)
           @mutex.synchronize do
             raise Error, "inproc endpoint already bound: #{endpoint}" if @registry.key?(endpoint)
             @registry[endpoint] = engine
@@ -44,7 +46,7 @@ module NNQ
         # @param endpoint [String]
         # @param engine [Engine]
         # @return [void]
-        def connect(endpoint, engine)
+        def connect(endpoint, engine, **)
           bound = @mutex.synchronize { @registry[endpoint] }
           raise Error, "inproc endpoint not bound: #{endpoint}" unless bound
 

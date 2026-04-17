@@ -121,6 +121,7 @@ module NNQ
       private
 
       def ready!(conn)
+        conn                     = wrap_connection(conn)
         @conn                    = conn
         @engine.connections[conn] = self
         transition!(:ready)
@@ -167,6 +168,19 @@ module NNQ
         ensure
           lost!
         end
+      end
+
+
+      # Post-handshake transport wrap. A transport that implements
+      # `wrap_connection(conn)` (e.g. nnq-zstd's zstd+tcp) returns a
+      # delegating wrapper that adds a layer (compression, TLS, …)
+      # without the engine caring. Unknown or hook-less transports pass
+      # through unchanged.
+      def wrap_connection(conn)
+        return conn unless @endpoint
+        transport = @engine.transport_for(@endpoint)
+        return conn unless transport.respond_to?(:wrap_connection)
+        transport.wrap_connection(conn, @engine)
       end
 
 

@@ -13,13 +13,16 @@ module NNQ
     # verbatim.
     #
     module IPC
+      Engine.transports["ipc"] = self
+
+
       class << self
         # Binds an IPC server.
         #
         # @param endpoint [String] e.g. "ipc:///tmp/nnq.sock" or "ipc://@abstract"
         # @param engine [Engine]
         # @return [Listener]
-        def bind(endpoint, engine)
+        def bind(endpoint, engine, **)
           path      = parse_path(endpoint)
           sock_path = to_socket_path(path)
 
@@ -35,7 +38,7 @@ module NNQ
         # @param endpoint [String]
         # @param engine [Engine]
         # @return [void]
-        def connect(endpoint, engine)
+        def connect(endpoint, engine, **)
           path      = parse_path(endpoint)
           sock_path = to_socket_path(path)
           sock      = UNIXSocket.new(sock_path)

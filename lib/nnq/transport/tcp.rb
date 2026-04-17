@@ -11,13 +11,16 @@ module NNQ
     # accept inside an Async fiber.
     #
     module TCP
+      Engine.transports["tcp"] = self
+
+
       class << self
         # Binds a TCP server to +endpoint+.
         #
         # @param endpoint [String] e.g. "tcp://127.0.0.1:5570" or "tcp://127.0.0.1:0"
         # @param engine [Engine]
         # @return [Listener]
-        def bind(endpoint, engine)
+        def bind(endpoint, engine, **)
           host, port = parse_endpoint(endpoint)
           host       = "0.0.0.0" if host == "*"
           server     = TCPServer.new(host, port)
@@ -34,7 +37,7 @@ module NNQ
         # @param endpoint [String]
         # @param engine [Engine]
         # @return [void]
-        def connect(endpoint, engine)
+        def connect(endpoint, engine, **)
           host, port = parse_endpoint(endpoint)
           sock       = ::Socket.tcp(host, port, connect_timeout: connect_timeout(engine.options))
 

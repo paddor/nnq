@@ -2,11 +2,6 @@
 
 require "async/queue"
 
-require_relative "options"
-require_relative "engine"
-require_relative "monitor_event"
-require_relative "reactor"
-
 module NNQ
   # Socket base class. Subclasses (PUSH, PULL, ...) wire up a routing
   # strategy and the SP protocol id.
@@ -50,15 +45,15 @@ module NNQ
     end
 
 
-    def bind(endpoint)
+    def bind(endpoint, **opts)
       ensure_parent_task
-      Reactor.run { @engine.bind(endpoint) }
+      Reactor.run { @engine.bind(endpoint, **opts) }
     end
 
 
-    def connect(endpoint)
+    def connect(endpoint, **opts)
       ensure_parent_task
-      Reactor.run { @engine.connect(endpoint) }
+      Reactor.run { @engine.connect(endpoint, **opts) }
     end
 
 

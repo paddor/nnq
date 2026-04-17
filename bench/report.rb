@@ -43,18 +43,14 @@ if options[:update_readme]
 
   abort "No runs found in #{RESULTS_PATH}" if rows.empty?
 
-  # Latest run_id per pattern -- so a single-pattern bench run still
-  # refreshes its own table without nuking the others.
-  latest_per_pattern = rows.group_by { |r| r[:pattern] }
-                           .transform_values { |rs| rs.map { |r| r[:run_id] }.max }
-
-  # Look up a specific cell's row from that pattern's latest run.
+  # Look up the most recent row for a cell across all history. Falling back
+  # to older runs means a partial bench (e.g. only push_pull, 1 peer, 128 B)
+  # refreshes just the cells it covers and leaves untouched cells showing
+  # their last known good value, instead of clobbering them with "—".
   cell = lambda do |pattern, transport, peers, msg_size|
-    latest = latest_per_pattern[pattern]
-    next nil unless latest
-    rows.find do |x|
-      x[:run_id] == latest && x[:pattern] == pattern &&
-        x[:transport] == transport && x[:peers] == peers && x[:msg_size] == msg_size
+    rows.reverse_each.find do |x|
+      x[:pattern] == pattern && x[:transport] == transport &&
+        x[:peers] == peers && x[:msg_size] == msg_size
     end
   end
 
@@ -134,7 +130,7 @@ if options[:update_readme]
   readme = replace_block.call(readme, "push_pull", build_push_pull.call)
   readme = replace_block.call(readme, "req_rep",   build_req_rep.call)
   File.write(README_PATH, readme)
-  puts "Updated #{README_PATH} from runs: #{latest_per_pattern.map { |k, v| "#{k}=#{v}" }.join(', ')}"
+  puts "Updated #{README_PATH} (most recent value per cell across #{rows.map { |r| r[:run_id] }.uniq.size} runs)"
   exit 0
 end
 
@@ -142,7 +138,10 @@ end
 
 rows.select! { |r| r[:pattern] == options[:pattern] } if options[:pattern]
 
-run_ids = rows.map { |r| r[:run_id] }.uniq.sort.last(options[:runs])
+# Preserve insertion order (= chronological) rather than sorting
+# alphabetically — named run IDs (e.g. "baseline-append") would
+# otherwise sort after ISO timestamps.
+run_ids = rows.map { |r| r[:run_id] }.uniq.last(options[:runs])
 
 if run_ids.size < 2
   abort "Need at least 2 runs to compare. Found #{run_ids.size}."
