@@ -48,6 +48,13 @@ module NNQ
       end
 
 
+      # Inproc fast-path hook: peer pipe enqueues straight into the
+      # local recv queue.
+      def direct_recv_for(_conn)
+        [@recv_queue, nil]
+      end
+
+
       # First-pipe-wins. Raising {ConnectionRejected} tells the
       # ConnectionLifecycle to tear down the just-registered connection
       # without ever exposing it to pumps.

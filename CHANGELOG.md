@@ -13,14 +13,21 @@
   keeps working unchanged. The new `Engine#connection_ready(conn,
   endpoint:)` and `ConnectionLifecycle#ready_direct!` entry points
   register a pipe as ready without the SP handshake phase.
+- **Inproc direct-recv fast path.** When a routing strategy exposes a
+  `#direct_recv_for(conn)` hook, the peer pipe enqueues directly into
+  the routing recv queue via `Pipe#wire_direct_recv`, bypassing both
+  the intermediate pipe queue and the recv pump fiber. PULL, BUS,
+  PAIR, SUB, REP, RESPONDENT, SURVEYOR, and the `*_raw` variants all
+  implement the hook; REQ (promise-based) stays on the fiber path.
+  Cuts three fiber hops to one on the steady-state recv path.
 
-  Inproc PUSH/PULL single-peer throughput (Ruby 4.0.2, no JIT):
+  Inproc PUSH/PULL single-peer throughput (Ruby 4.0.2):
 
-  | Size | Before | After | Speedup |
+  | Size   | Before (no JIT) | After (no JIT) | After (+YJIT) |
   |---|---|---|---|
-  | 128 B  |  122k msg/s |  292k msg/s | 2.4× |
-  | 2 KiB  |   87k msg/s |  296k msg/s | 3.4× |
-  | 32 KiB |   21k msg/s |  213k msg/s | 10×  |
+  | 128 B  |  122k msg/s |  350k msg/s | 1,226k msg/s |
+  | 2 KiB  |   87k msg/s |  360k msg/s | 1,458k msg/s |
+  | 32 KiB |   21k msg/s |  261k msg/s |   887k msg/s |
 
 - **Routing pumps shed their `@pump_tasks` bookkeeping.** `bus`, `pub`,
   `surveyor`, and `surveyor_raw` no longer track per-connection pump

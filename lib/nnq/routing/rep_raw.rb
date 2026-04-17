@@ -56,6 +56,16 @@ module NNQ
       end
 
 
+      # Inproc fast-path hook.
+      def direct_recv_for(conn)
+        transform = lambda do |wire_bytes|
+          header, payload = parse_backtrace(wire_bytes)
+          header ? [conn, header, payload] : nil
+        end
+        [@recv_queue, transform]
+      end
+
+
       def close
         @recv_queue.enqueue(nil)
       end

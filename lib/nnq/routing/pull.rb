@@ -22,6 +22,14 @@ module NNQ
       end
 
 
+      # Inproc fast-path hook: return the routing recv queue so the
+      # peer pipe can enqueue directly, skipping the recv pump fiber.
+      # Identity transform — PULL bodies are the user payload already.
+      def direct_recv_for(_conn)
+        [@queue, nil]
+      end
+
+
       # @return [String, nil] message body, or nil if the queue was closed
       def receive
         @queue.dequeue

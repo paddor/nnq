@@ -43,6 +43,13 @@ module NNQ
       end
 
 
+      # Inproc fast-path hook: peer pipe enqueues directly into the
+      # shared recv queue — identity transform, no backtrace or filter.
+      def direct_recv_for(_conn)
+        [@recv_queue, nil]
+      end
+
+
       # @return [String, nil] message body, or nil once the socket is closed
       def receive
         @recv_queue.dequeue

@@ -38,6 +38,13 @@ module NNQ
       end
 
 
+      # Inproc fast-path hook: filter via the subscription list in the
+      # transform, then enqueue only matching bodies.
+      def direct_recv_for(_conn)
+        [@queue, ->(body) { matches?(body) ? body : nil }]
+      end
+
+
       # @return [String, nil]
       def receive
         @queue.dequeue

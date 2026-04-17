@@ -89,6 +89,17 @@ module NNQ
       end
 
 
+      # Inproc fast-path hook: peer pipe parses the backtrace and
+      # enqueues the same [conn, btrace, payload] tuple the pump would.
+      def direct_recv_for(conn)
+        transform = lambda do |body|
+          btrace, payload = parse_backtrace(body)
+          btrace ? [conn, btrace, payload] : nil
+        end
+        [@recv_queue, transform]
+      end
+
+
       def connection_removed(conn)
         @mutex.synchronize do
           @pending = nil if @pending && @pending[0] == conn

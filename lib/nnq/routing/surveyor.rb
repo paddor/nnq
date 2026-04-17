@@ -77,6 +77,21 @@ module NNQ
       end
 
 
+      # Inproc fast-path hook. Transform filters replies by current
+      # survey id and strips the 4-byte header, mirroring #enqueue.
+      def direct_recv_for(_conn)
+        mutex = @mutex
+        transform = lambda do |body|
+          next nil if body.bytesize < 4
+          id      = body.unpack1("N")
+          payload = body.byteslice(4..)
+          match   = mutex.synchronize { @current_id == id }
+          match ? payload : nil
+        end
+        [@recv_queue, transform]
+      end
+
+
       # Strips the 4-byte survey id for verbose trace previews.
       def preview_body(wire)
         wire.byteslice(4..) || wire

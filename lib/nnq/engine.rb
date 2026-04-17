@@ -368,6 +368,18 @@ module NNQ
 
 
     def spawn_recv_loop(conn)
+      # Inproc fast-path: wire the peer pipe to enqueue directly into
+      # the routing recv queue, skipping both the recv pump fiber and
+      # the intermediate pipe queue. Cuts three fiber hops to one on
+      # PUSH/PULL and peers.
+      if conn.is_a?(Transport::Inproc::Pipe) && conn.peer && @routing.respond_to?(:direct_recv_for)
+        queue, transform = @routing.direct_recv_for(conn)
+        if queue
+          conn.peer.wire_direct_recv(queue, transform)
+          return
+        end
+      end
+
       @connections[conn].barrier.async(annotation: "nnq recv #{conn.endpoint}") do
         loop do
           body = conn.receive_message
