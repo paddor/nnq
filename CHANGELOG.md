@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- **Inproc transport now uses a queue-based `Inproc::Pipe`** instead
+  of a Unix `socketpair(2)` running the full SP protocol.
+  `NNQ::Transport::Inproc::Pipe` duck-types `NNQ::Connection` and
+  transfers frozen Strings through a pair of `Async::Queue`s (one
+  per direction). No framing, no handshake, no kernel buffer copy.
+  When a routing strategy supplies an SP backtrace header
+  (REQ/REP/SURVEYOR), it's prepended before enqueue so the receive
+  side sees the same layout as the TCP/IPC path and `parse_backtrace`
+  keeps working unchanged. The new `Engine#connection_ready(conn,
+  endpoint:)` and `ConnectionLifecycle#ready_direct!` entry points
+  register a pipe as ready without the SP handshake phase.
+
+  Inproc PUSH/PULL single-peer throughput (Ruby 4.0.2, no JIT):
+
+  | Size | Before | After | Speedup |
+  |---|---|---|---|
+  | 128 B  |  122k msg/s |  292k msg/s | 2.4× |
+  | 2 KiB  |   87k msg/s |  296k msg/s | 3.4× |
+  | 32 KiB |   21k msg/s |  213k msg/s | 10×  |
+
 - **Routing pumps shed their `@pump_tasks` bookkeeping.** `bus`, `pub`,
   `surveyor`, and `surveyor_raw` no longer track per-connection pump
   tasks in a hash. Pumps are spawned under

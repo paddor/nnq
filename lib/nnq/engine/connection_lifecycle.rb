@@ -104,6 +104,15 @@ module NNQ
       end
 
 
+      # Registers an already-ready connection object (e.g. an
+      # {Transport::Inproc::Pipe}) without running the SP handshake.
+      # Transports that frame on the wire should call {#handshake!}
+      # instead.
+      def ready_direct!(conn)
+        ready!(conn)
+      end
+
+
       # Starts a supervisor for this connection. Must be called after
       # all per-connection pumps (recv loop, send pump) have been
       # spawned on the connection barrier. The supervisor blocks until

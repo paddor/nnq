@@ -1,19 +1,20 @@
 # frozen_string_literal: true
 
-require "socket"
-require "io/stream"
+require "async/queue"
+
+require_relative "inproc/pipe"
 
 module NNQ
   module Transport
     # In-process transport. Both peers live in the same process and
-    # exchange frames over a Unix socketpair — no network, no address.
+    # exchange frozen Strings through a pair of {Async::Queue}s — no
+    # wire framing, no socketpair, no SP handshake.
     #
-    # Unlike omq's DirectPipe, inproc here still runs through
-    # Protocol::SP: the socketpair just replaces TCP. Kernel buffering
-    # across the pair is plenty to avoid contention for typical
-    # in-process message sizes, and reusing the SP handshake + framing
-    # keeps the transport ~40 LOC instead of a parallel Connection
-    # implementation.
+    # The historical implementation ran through a Unix `socketpair(2)`
+    # and the full SP protocol, making inproc roughly as expensive as
+    # IPC. Swapping to {Inproc::Pipe} (duck-types {NNQ::Connection})
+    # drops the kernel buffer copy, the framing encode/decode, and the
+    # handshake — inproc becomes a pure in-process queue transfer.
     #
     module Inproc
       Engine.transports["inproc"] = self
@@ -38,10 +39,10 @@ module NNQ
         end
 
 
-        # Connects +engine+ to a bound inproc endpoint. Creates a Unix
-        # socketpair, hands one side to the bound engine (accepted),
-        # the other to the connecting engine (connected). Both sides
-        # run the normal SP handshake concurrently.
+        # Connects +engine+ to a bound inproc endpoint. Creates a Pipe
+        # pair — one queue per direction — and registers each side with
+        # its owning engine via {Engine#connection_ready}. No handshake
+        # runs; both ends are live as soon as the pipes are wired.
         #
         # @param endpoint [String]
         # @param engine [Engine]
@@ -50,16 +51,15 @@ module NNQ
           bound = @mutex.synchronize { @registry[endpoint] }
           raise Error, "inproc endpoint not bound: #{endpoint}" unless bound
 
-          a, b = UNIXSocket.pair
+          a_to_b = Async::Queue.new
+          b_to_a = Async::Queue.new
+          client = Pipe.new(send_queue: a_to_b, recv_queue: b_to_a, endpoint: endpoint)
+          server = Pipe.new(send_queue: b_to_a, recv_queue: a_to_b, endpoint: endpoint)
+          client.peer = server
+          server.peer = client
 
-          # Handshake on the bound side must run concurrently with
-          # ours — if we called bound.handle_accepted synchronously
-          # it would block on reading our greeting before we've had
-          # a chance to write it.
-          bound.spawn_task(annotation: "nnq inproc accept #{endpoint}") do
-            bound.handle_accepted(IO::Stream::Buffered.wrap(b), endpoint: endpoint)
-          end
-          engine.handle_connected(IO::Stream::Buffered.wrap(a), endpoint: endpoint)
+          bound.connection_ready(server, endpoint: endpoint)
+          engine.connection_ready(client, endpoint: endpoint)
         end
 
 
@@ -86,7 +86,7 @@ module NNQ
         end
 
 
-        # No accept loop: inproc connects synchronously.
+        # No accept loop: inproc connects are fully synchronous.
         def start_accept_loop(_parent_task, &_on_accepted)
         end
 

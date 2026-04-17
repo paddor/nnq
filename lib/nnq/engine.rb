@@ -273,6 +273,19 @@ module NNQ
     end
 
 
+    # Registers an already-connected, framing-free pipe (inproc). Skips
+    # the SP handshake entirely — {Transport::Inproc::Pipe} is a Ruby
+    # duck-type for {NNQ::Connection} and has no wire protocol.
+    def connection_ready(conn, endpoint:)
+      lifecycle = ConnectionLifecycle.new(self, endpoint: endpoint, framing: :inproc)
+      lifecycle.ready_direct!(conn)
+      spawn_recv_loop(conn) if @routing.respond_to?(:enqueue) && @connections.key?(conn)
+      lifecycle.start_supervisor!
+    rescue ConnectionRejected
+      # routing rejected this peer (e.g. PAIR already bonded)
+    end
+
+
     # Spawns a task under the given parent barrier (defaults to the
     # socket-level barrier). Used by routing strategies (e.g. PUSH send
     # pump) to attach long-lived fibers to the engine's lifecycle. The
