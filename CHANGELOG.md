@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 — 2026-04-18
 
 - **Inproc transport now uses a queue-based `Inproc::Pipe`** instead
   of a Unix `socketpair(2)` running the full SP protocol.
