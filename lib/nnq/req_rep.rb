@@ -18,7 +18,7 @@ module NNQ
     # raw mode — use {#send} / {#receive} there.
     def send_request(body)
       raise Error, "REQ#send_request not available in raw mode" if raw?
-      body = frozen_binary(body)
+      body = coerce_binary(body)
       Reactor.run { @engine.routing.send_request(body) }
     end
 
@@ -29,7 +29,7 @@ module NNQ
     # cooked mode.
     def send(body, header:)
       raise Error, "REQ#send not available in cooked mode" unless raw?
-      body = frozen_binary(body)
+      body = coerce_binary(body)
       Reactor.run { @engine.routing.send(body, header: header) }
     end
 
@@ -74,7 +74,7 @@ module NNQ
     # came from. Raises in raw mode.
     def send_reply(body)
       raise Error, "REP#send_reply not available in raw mode" if raw?
-      body = frozen_binary(body)
+      body = coerce_binary(body)
       Reactor.run { @engine.routing.send_reply(body) }
     end
 
@@ -84,7 +84,7 @@ module NNQ
     # tuple). Silent drop if +to+ is closed. Raises in cooked mode.
     def send(body, to:, header:)
       raise Error, "REP#send not available in cooked mode" unless raw?
-      body = frozen_binary(body)
+      body = coerce_binary(body)
       Reactor.run { @engine.routing.send(body, to: to, header: header) }
     end
 

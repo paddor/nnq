@@ -135,16 +135,21 @@ module NNQ
     end
 
 
-    # Coerces +body+ to a frozen binary string. Called by every send
-    # method so a caller can't mutate the string after it's been
-    # enqueued (the body sits in a send queue or per-peer queue until
-    # the pump writes it, and an unfrozen caller-owned buffer could be
-    # appended to mid-flight).
+    # Coerces +body+ to a frozen `Encoding::BINARY`-tagged String and
+    # returns it. Every send method runs its body through this so the
+    # receiver sees a uniform frozen+BINARY contract across transports
+    # (mutation bugs raise `FrozenError` instead of silently corrupting
+    # a shared reference on the inproc fast path).
     #
-    # Fast-path: already frozen + binary → returned as-is.
-    def frozen_binary(body)
-      return body if body.frozen? && body.encoding == Encoding::BINARY
-      body.b.freeze
+    # Fast-path: unfrozen non-BINARY strings are re-tagged in place
+    # (force_encoding is a flag flip, no copy). The pathological case
+    # of a frozen non-BINARY body (e.g. a `# frozen_string_literal: true`
+    # literal) can't be re-tagged in place — the inproc {Pipe} handles
+    # that with a copy so the receive contract stays uniform.
+    def coerce_binary(body)
+      body = body.to_str unless body.is_a?(String)
+      body.force_encoding(Encoding::BINARY) unless body.frozen? || body.encoding == Encoding::BINARY
+      body.freeze
     end
 
 

@@ -69,7 +69,14 @@ module NNQ
 
         def send_message(body, header: nil)
           raise ClosedError, "connection closed" if @closed
-          wire = header ? header + body : body
+
+          # Socket#coerce_binary tags mutable bodies BINARY in place;
+          # the pathological case of a frozen non-BINARY body (e.g. a
+          # `# frozen_string_literal: true` literal) can't be re-tagged
+          # in place, so copy it here to keep the receiver contract
+          # uniform with TCP/IPC.
+          body = body.b.freeze if body.encoding != Encoding::BINARY
+          wire = header ? (header + body).freeze : body
 
           if (q = @direct_recv_queue)
             item = @direct_recv_transform ? @direct_recv_transform.call(wire) : wire
@@ -85,6 +92,10 @@ module NNQ
 
         def write_messages(bodies)
           raise ClosedError, "connection closed" if @closed
+
+          if bodies.any? { |b| b.encoding != Encoding::BINARY }
+            bodies = bodies.map { |b| b.encoding == Encoding::BINARY ? b : b.b.freeze }
+          end
 
           if (q = @direct_recv_queue)
             transform = @direct_recv_transform

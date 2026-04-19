@@ -71,7 +71,7 @@ module NNQ
       def enqueue(body, _conn)
         return if body.bytesize < 4
         id      = body.unpack1("N")
-        payload = body.byteslice(4..)
+        payload = body.byteslice(4..).freeze
 
         @mutex.synchronize do
           if @outstanding && @outstanding[0] == id

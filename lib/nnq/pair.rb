@@ -10,7 +10,7 @@ module NNQ
   #
   class PAIR0 < Socket
     def send(body)
-      body = frozen_binary(body)
+      body = coerce_binary(body)
       Reactor.run { @engine.routing.send(body) }
     end
 

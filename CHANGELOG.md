@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.8.0 — 2026-04-19
+
+- **Uniform frozen + `BINARY` message contract across transports.**
+  `Socket#coerce_binary` replaces the old `frozen_binary` + `.b.freeze`
+  copy on the hot send path. Every send method runs its body through
+  `coerce_binary`, which:
+  - coerces non-String bodies via `#to_str` (nil / `42` / `:foo` raise
+    `NoMethodError` instead of producing a zero-byte frame);
+  - re-tags unfrozen non-BINARY bodies to `Encoding::BINARY` in place —
+    a flag flip, no copy;
+  - freezes the body.
+
+  Receivers always see a frozen BINARY-tagged body: TCP/IPC get it via
+  the recv-pump freeze, inproc gets it via `Pipe#send_message`, which
+  only allocates for the pathological case of a frozen non-BINARY body
+  (the typical `# frozen_string_literal: true` UTF-8 literal). Bodies
+  returned by REP/REQ/SURVEYOR/RESPONDENT (cooked and raw) are frozen
+  by `parse_backtrace` and the REQ/SURVEYOR id-parsing paths. Mutation
+  bugs surface as `FrozenError` instead of silently corrupting a shared
+  reference on the inproc fast path. Inproc throughput pays ~20-30%
+  for the contract; TCP/IPC unaffected.
+
+- **Benchmarks send fresh strings per iteration.** `BenchHelper.run`
+  passes an unfrozen `"x" * size` through to the burst closure; the
+  `measure` / `measure_roundtrip` bursts `.dup` it before each send.
+  More realistic than reusing one frozen payload and hitting every
+  fast path in `coerce_binary` + `Pipe#send_message`.
+
 ## 0.7.0 — 2026-04-18
 
 - **Inproc transport now uses a queue-based `Inproc::Pipe`** instead
@@ -20,15 +48,6 @@
   PAIR, SUB, REP, RESPONDENT, SURVEYOR, and the `*_raw` variants all
   implement the hook; REQ (promise-based) stays on the fiber path.
   Cuts three fiber hops to one on the steady-state recv path.
-
-  Inproc PUSH/PULL single-peer throughput (Ruby 4.0.2):
-
-  | Size   | Before (no JIT) | After (no JIT) | After (+YJIT) |
-  |---|---|---|---|
-  | 128 B  |  122k msg/s |  350k msg/s | 1,226k msg/s |
-  | 2 KiB  |   87k msg/s |  360k msg/s | 1,458k msg/s |
-  | 32 KiB |   21k msg/s |  261k msg/s |   887k msg/s |
-
 - **Routing pumps shed their `@pump_tasks` bookkeeping.** `bus`, `pub`,
   `surveyor`, and `surveyor_raw` no longer track per-connection pump
   tasks in a hash. Pumps are spawned under

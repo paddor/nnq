@@ -67,7 +67,7 @@ module NNQ
         return if body.bytesize < 4
 
         id      = body.unpack1("N")
-        payload = body.byteslice(4..)
+        payload = body.byteslice(4..).freeze
 
         @mutex.synchronize do
           return unless @current_id == id
@@ -84,7 +84,7 @@ module NNQ
         transform = lambda do |body|
           next nil if body.bytesize < 4
           id      = body.unpack1("N")
-          payload = body.byteslice(4..)
+          payload = body.byteslice(4..).freeze
           match   = mutex.synchronize { @current_id == id }
           match ? payload : nil
         end

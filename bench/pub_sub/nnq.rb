@@ -23,7 +23,7 @@ BenchHelper.run("PUB/SUB", dir: __dir__, peer_counts: [3]) do |transport, ep, pe
 
   burst = ->(k) {
     send_barrier = Async::Barrier.new
-    send_barrier.async { k.times { pub.send(payload) } }
+    send_barrier.async { k.times { pub.send(payload.dup) } }
     recv_barrier = Async::Barrier.new
     subs.each { |sub| recv_barrier.async { k.times { sub.receive } } }
     recv_barrier.wait

@@ -382,7 +382,7 @@ module NNQ
 
       @connections[conn].barrier.async(annotation: "nnq recv #{conn.endpoint}") do
         loop do
-          body = conn.receive_message
+          body = conn.receive_message.freeze
           if @verbose_monitor
             preview = @routing.respond_to?(:preview_body) ? @routing.preview_body(body) : body
             emit_verbose_msg_received(preview)

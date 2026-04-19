@@ -16,7 +16,7 @@ module NNQ
     # Cooked: broadcasts +body+ as a survey to all connected respondents.
     def send_survey(body)
       raise Error, "SURVEYOR#send_survey not available in raw mode" if raw?
-      body = frozen_binary(body)
+      body = coerce_binary(body)
       Reactor.run { @engine.routing.send_survey(body) }
     end
 
@@ -26,7 +26,7 @@ module NNQ
     # protocol-sp header kwarg — no concat). Raises in cooked mode.
     def send(body, header:)
       raise Error, "SURVEYOR#send not available in cooked mode" unless raw?
-      body = frozen_binary(body)
+      body = coerce_binary(body)
       Reactor.run { @engine.routing.send(body, header: header) }
     end
 
@@ -70,7 +70,7 @@ module NNQ
     # recent survey. Raises in raw mode.
     def send_reply(body)
       raise Error, "RESPONDENT#send_reply not available in raw mode" if raw?
-      body = frozen_binary(body)
+      body = coerce_binary(body)
       Reactor.run { @engine.routing.send_reply(body) }
     end
 
@@ -78,7 +78,7 @@ module NNQ
     # Raw: writes +body+ with +header+ back to +to+. Raises in cooked mode.
     def send(body, to:, header:)
       raise Error, "RESPONDENT#send not available in cooked mode" unless raw?
-      body = frozen_binary(body)
+      body = coerce_binary(body)
       Reactor.run { @engine.routing.send(body, to: to, header: header) }
     end
 

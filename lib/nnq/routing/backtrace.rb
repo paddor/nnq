@@ -27,7 +27,7 @@ module NNQ
           hops   += 1
 
           if word.getbyte(0) & 0x80 != 0
-            return [body.byteslice(0, offset), body.byteslice(offset..)]
+            return [body.byteslice(0, offset).freeze, body.byteslice(offset..).freeze]
           end
         end
 
