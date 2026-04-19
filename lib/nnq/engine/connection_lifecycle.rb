@@ -151,6 +151,11 @@ module NNQ
       def tear_down!(reconnect: false)
         return if @state == :closed
         transition!(:closed)
+        # Cancel sibling pumps BEFORE closing the fd. If we close first,
+        # any pump still parked in io_wait wakes up with
+        # `IOError: stream closed in another thread`. The caller is the
+        # supervisor task, which is NOT in the barrier — no self-stop.
+        @barrier.stop
         if @conn
           @engine.connections.delete(@conn)
           @engine.routing.connection_removed(@conn) if @engine.routing.respond_to?(:connection_removed)
@@ -159,10 +164,6 @@ module NNQ
           @engine.resolve_all_peers_gone_if_empty
         end
         @engine.maybe_reconnect(@endpoint) if reconnect
-        # Cancel every sibling pump of this connection. The caller is
-        # the supervisor task, which is NOT in the barrier — so there
-        # is no self-stop risk.
-        @barrier.stop
       end
 
 

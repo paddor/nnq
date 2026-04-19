@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.1 — 2026-04-19
+
+- **Fix close-race in `ConnectionLifecycle#tear_down!`.** The fd was
+  closed before sibling pumps were cancelled, which woke recv fibers
+  parked in `io_wait` with `IOError: stream closed in another thread`.
+  `@barrier.stop` now runs before `@conn.close`, so blocking reads
+  unwind via `Async::Stop` before the fd goes away.
+
 ## 0.8.0 — 2026-04-19
 
 - **Uniform frozen + `BINARY` message contract across transports.**
