@@ -21,5 +21,5 @@ Gem::Specification.new do |s|
 
   s.add_dependency "async", "~> 2.38"
   s.add_dependency "io-stream", "~> 0.11"
-  s.add_dependency "protocol-sp", ">= 0.3"
+  s.add_dependency "protocol-sp", "~> 0.4"
 end
