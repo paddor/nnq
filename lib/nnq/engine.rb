@@ -118,10 +118,12 @@ module NNQ
 
 
     # Emits a :message_received verbose event. Same early-return
-    # discipline as {#emit_verbose_msg_sent}.
-    def emit_verbose_msg_received(body)
+    # discipline as {#emit_verbose_msg_sent}. +wire_size+ is the
+    # on-the-wire byte count when the connection is wrapped by a
+    # compression decorator (nnq-zstd); nil for plain transports.
+    def emit_verbose_msg_received(body, wire_size: nil)
       return unless @verbose_monitor
-      emit_monitor_event(:message_received, detail: { body: body })
+      emit_monitor_event(:message_received, detail: { body: body, wire_size: wire_size })
     end
 
 
@@ -384,8 +386,9 @@ module NNQ
         loop do
           body = conn.receive_message.freeze
           if @verbose_monitor
-            preview = @routing.respond_to?(:preview_body) ? @routing.preview_body(body) : body
-            emit_verbose_msg_received(preview)
+            preview   = @routing.respond_to?(:preview_body) ? @routing.preview_body(body) : body
+            wire_size = conn.respond_to?(:last_wire_size_in) ? conn.last_wire_size_in : nil
+            emit_verbose_msg_received(preview, wire_size: wire_size)
           end
           @routing.enqueue(body, conn)
         rescue *CONNECTION_LOST, Async::Stop

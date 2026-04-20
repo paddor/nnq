@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.2 — 2026-04-20
+
+- **`:message_received` verbose events carry `wire_size:`.** The
+  engine recv loop now reads `conn.last_wire_size_in` (duck-typed,
+  nil-safe) and passes it through `emit_verbose_msg_received` into
+  the monitor event detail, so compression decorators like nnq-zstd
+  can surface the compressed on-the-wire byte count to `-vvv`
+  traces. Plain transports are unaffected (`wire_size: nil`).
+
 ## 0.8.1 — 2026-04-19
 
 - **Fix close-race in `ConnectionLifecycle#tear_down!`.** The fd was
